@@ -8,6 +8,16 @@ var leafNodeNames = {
     INPUT: 1
 };
 
+function isChildOf(parent, child) {
+	if(parent && child){
+		if(parent === child){
+			return true;
+		}
+		return parent.contains(child);
+	}
+	return false;
+}
+
 function every ( nodeList, fn ) {
     var l = nodeList.length;
     while ( l-- ) {
@@ -73,6 +83,19 @@ function getPreviousBlock ( node ) {
 function getNextBlock ( node ) {
     return getBlockWalker( node ).nextNode();
 }
+
+function getNearestWithin(node, stopNode, tag, attributes ){
+	do {
+		if(! isChildOf(stopNode, node)){
+			return null;
+		}
+		if ( hasTagAttributes( node, tag, attributes ) ) {
+            return node;
+        }
+	} while ( node = node.parentNode );
+	return null;
+}
+
 function getNearest ( node, tag, attributes ) {
     do {
         if ( hasTagAttributes( node, tag, attributes ) ) {

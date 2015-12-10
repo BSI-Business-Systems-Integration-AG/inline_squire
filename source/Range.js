@@ -179,7 +179,7 @@ var deleteContentsOfRange = function ( range ) {
 
 // ---
 
-var insertTreeFragmentIntoRange = function ( range, frag ) {
+var insertTreeFragmentIntoRange = function ( range, frag, body ) {
     // Check if it's all inline content
     var allInline = true,
         children = frag.childNodes,
@@ -208,8 +208,8 @@ var insertTreeFragmentIntoRange = function ( range, frag ) {
         // 1. Split up to blockquote (if a parent) or body
         var splitPoint = range.startContainer,
             nodeAfterSplit = split( splitPoint, range.startOffset,
-                getNearest( splitPoint.parentNode, 'BLOCKQUOTE' ) ||
-                splitPoint.ownerDocument.body ),
+                getNearestWithin( splitPoint.parentNode, body, 'BLOCKQUOTE' ) ||
+                body ),
             nodeBeforeSplit = nodeAfterSplit.previousSibling,
             startContainer = nodeBeforeSplit,
             startOffset = startContainer.childNodes.length,

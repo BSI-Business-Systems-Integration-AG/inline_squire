@@ -259,7 +259,8 @@ var keyHandlers = {
             var current = getStartBlockOfRange( range ),
                 previous = current && getPreviousBlock( current );
             // Must not be at the very beginning of the text area.
-            if ( previous ) {
+            // Also, must be within editor div.
+            if ( previous && isChildOf(self._body, previous)) {
                 // If not editable, just delete whole block.
                 if ( !previous.isContentEditable ) {
                     detach( previous );
@@ -318,7 +319,8 @@ var keyHandlers = {
             var current = getStartBlockOfRange( range ),
                 next = current && getNextBlock( current );
             // Must not be at the very end of the text area.
-            if ( next ) {
+            // also, next must not be outside of our editor div.
+            if ( next && isChildOf(self._body, next)) {
                 // If not editable, just delete whole block.
                 if ( !next.isContentEditable ) {
                     detach( next );

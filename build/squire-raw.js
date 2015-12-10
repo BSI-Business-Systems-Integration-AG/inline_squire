@@ -177,6 +177,16 @@ var leafNodeNames = {
     INPUT: 1
 };
 
+function isChildOf(parent, child) {
+	if(parent && child){
+		if(parent === child){
+			return true;
+		}
+		return parent.contains(child);
+	}
+	return false;
+}
+
 function every ( nodeList, fn ) {
     var l = nodeList.length;
     while ( l-- ) {
@@ -242,6 +252,19 @@ function getPreviousBlock ( node ) {
 function getNextBlock ( node ) {
     return getBlockWalker( node ).nextNode();
 }
+
+function getNearestWithin(node, stopNode, tag, attributes ){
+	do {
+		if(! isChildOf(stopNode, node)){
+			return null;
+		}
+		if ( hasTagAttributes( node, tag, attributes ) ) {
+            return node;
+        }
+	} while ( node = node.parentNode );
+	return null;
+}
+
 function getNearest ( node, tag, attributes ) {
     do {
         if ( hasTagAttributes( node, tag, attributes ) ) {
@@ -811,7 +834,7 @@ var deleteContentsOfRange = function ( range ) {
 
 // ---
 
-var insertTreeFragmentIntoRange = function ( range, frag ) {
+var insertTreeFragmentIntoRange = function ( range, frag, body ) {
     // Check if it's all inline content
     var allInline = true,
         children = frag.childNodes,
@@ -840,8 +863,8 @@ var insertTreeFragmentIntoRange = function ( range, frag ) {
         // 1. Split up to blockquote (if a parent) or body
         var splitPoint = range.startContainer,
             nodeAfterSplit = split( splitPoint, range.startOffset,
-                getNearest( splitPoint.parentNode, 'BLOCKQUOTE' ) ||
-                splitPoint.ownerDocument.body ),
+                getNearestWithin( splitPoint.parentNode, body, 'BLOCKQUOTE' ) ||
+                body ),
             nodeBeforeSplit = nodeAfterSplit.previousSibling,
             startContainer = nodeBeforeSplit,
             startOffset = startContainer.childNodes.length,
@@ -1408,7 +1431,8 @@ var keyHandlers = {
             var current = getStartBlockOfRange( range ),
                 previous = current && getPreviousBlock( current );
             // Must not be at the very beginning of the text area.
-            if ( previous ) {
+            // Also, must be within editor div.
+            if ( previous && isChildOf(self._body, previous)) {
                 // If not editable, just delete whole block.
                 if ( !previous.isContentEditable ) {
                     detach( previous );
@@ -1467,7 +1491,8 @@ var keyHandlers = {
             var current = getStartBlockOfRange( range ),
                 next = current && getNextBlock( current );
             // Must not be at the very end of the text area.
-            if ( next ) {
+            // also, next must not be outside of our editor div.
+            if ( next && isChildOf(self._body, next)) {
                 // If not editable, just delete whole block.
                 if ( !next.isContentEditable ) {
                     detach( next );
@@ -2129,6 +2154,9 @@ function getSquireInstance ( doc ) {
         instance;
     while ( l-- ) {
         instance = instances[l];
+        //TODO: fko [RTE] how to implement this?
+        // function is called from lots of locations
+        // usually with the doc of a node
         if ( instance._doc === doc ) {
             return instance;
         }
@@ -2150,14 +2178,15 @@ function mergeObjects ( base, extras ) {
     return base;
 }
 
-function Squire ( doc, config ) {
+function Squire ( div, doc, config ) {
     var win = doc.defaultView;
     var body = doc.body;
     var mutation;
 
     this._win = win;
     this._doc = doc;
-    this._body = body;
+    this._body = div;
+    this._editorDiv = div;
 
     this._events = {};
 
@@ -2178,8 +2207,8 @@ function Squire ( doc, config ) {
     this.addEventListener( 'keyup', this._updatePathOnEvent );
     this.addEventListener( 'mouseup', this._updatePathOnEvent );
 
-    win.addEventListener( 'focus', this, false );
-    win.addEventListener( 'blur', this, false );
+    this._editorDiv.addEventListener( 'focus', this, false );
+    this._editorDiv.addEventListener( 'blur', this, false );
 
     this._undoIndex = -1;
     this._undoStack = [];
@@ -2226,6 +2255,8 @@ function Squire ( doc, config ) {
     // I think IE10 does not have the same bug, but it doesn't hurt to replace
     // its native fn too and then we don't need yet another UA category.
     if ( isIElt11 ) {
+    	//TODO: fko [RTE] use polyfill?
+
         win.Text.prototype.splitText = function ( offset ) {
             var afterSplit = this.ownerDocument.createTextNode(
                     this.data.slice( offset ) ),
@@ -2244,7 +2275,7 @@ function Squire ( doc, config ) {
         };
     }
 
-    body.setAttribute( 'contenteditable', 'true' );
+    this._editorDiv.setAttribute( 'contenteditable', 'true' );
 
     // Remove Firefox's built-in controls
     try {
@@ -2345,8 +2376,8 @@ proto.destroy = function () {
         doc = this._doc,
         events = this._events,
         type;
-    win.removeEventListener( 'focus', this, false );
-    win.removeEventListener( 'blur', this, false );
+    this._body.removeEventListener( 'focus', this, false );
+    this._body.removeEventListener( 'blur', this, false );
     for ( type in events ) {
         if ( !customEvents[ type ] ) {
             doc.removeEventListener( type, this, true );
@@ -2379,7 +2410,8 @@ proto.addEventListener = function ( type, fn ) {
     if ( !handlers ) {
         handlers = this._events[ type ] = [];
         if ( !customEvents[ type ] ) {
-            this._doc.addEventListener( type, this, true );
+        	//TODO: fko: [RTE] add listeners to div? Possible for all events?
+            this._body.addEventListener( type, this, true );
         }
     }
     handlers.push( fn );
@@ -2413,9 +2445,20 @@ proto._createRange =
     if ( range instanceof this._win.Range ) {
         return range.cloneRange();
     }
+    //TODO: fko [RTE] assert that range is within editorDiv?
     var domRange = this._doc.createRange();
+    // range seems to be a node in this case...
+    // make sure range is contained within our editor div.
+    if(! isChildOf(this._body, range)){
+    	range = this._body;
+    	startOffset = 0;
+    }
     domRange.setStart( range, startOffset );
     if ( endContainer ) {
+    	if(! isChildOf(this._body, endContainer)){
+    		endContainer = this._body;
+    		endOffset = this._body.childNodes.length;
+    	}
         domRange.setEnd( endContainer, endOffset );
     } else {
         domRange.setEnd( range, startOffset );
@@ -2425,29 +2468,29 @@ proto._createRange =
 
 proto.scrollRangeIntoView = function ( range ) {
     // Get the bounding rect
-    var rect = range.getBoundingClientRect();
-    var node, parent;
-    if ( !rect.top ) {
-        node = this._doc.createElement( 'SPAN' );
-        range = range.cloneRange();
-        insertNodeInRange( range, node );
-        rect = node.getBoundingClientRect();
-        parent = node.parentNode;
-        parent.removeChild( node );
-        parent.normalize();
-    }
-    // Then check and scroll
-    var win = this._win;
-    var height = win.innerHeight;
-    var top = rect.top;
-    if ( top > height ) {
-        win.scrollBy( 0, top - height + 20 );
-    }
-    // And fire event for integrations to use
-    this.fireEvent( 'scrollPointIntoView', {
-        x: rect.left,
-        y: top
-    });
+//    var rect = range.getBoundingClientRect();
+//    var node, parent;
+//    if ( !rect.top ) {
+//        node = this._doc.createElement( 'SPAN' );
+//        range = range.cloneRange();
+//        insertNodeInRange( range, node );
+//        rect = node.getBoundingClientRect();
+//        parent = node.parentNode;
+//        parent.removeChild( node );
+//        parent.normalize();
+//    }
+//    // Then check and scroll
+//    var win = this._win;
+//    var height = win.innerHeight;
+//    var top = rect.top;
+//    if ( top > height ) {
+//        win.scrollBy( 0, top - height + 20 );
+//    }
+//    // And fire event for integrations to use
+//    this.fireEvent( 'scrollPointIntoView', {
+//        x: rect.left,
+//        y: top
+//    });
 };
 
 proto._moveCursorTo = function ( toStart ) {
@@ -2464,14 +2507,38 @@ proto.moveCursorToEnd = function () {
     return this._moveCursorTo( false );
 };
 
+proto._ensureRangeWithin = function (range) {
+	if(!range){
+		return range;
+	}
+
+	var start = range.startContainer,
+	end = range.endContainer;
+
+	if(!isChildOf(this._body, start) && !isChildOf(this._body, end)){
+		//completely outside our editor.
+		return null; //TODO: fko [RTE] just for debug purposes. Find default afterwards.
+	}
+
+	if(! isChildOf(this._body, start)){
+		range.setStart(this._body, 0);
+	}
+	if(! isChildOf(this._body, end)){
+		range.setEnd(this._body, this._body.childNodes.length);
+	}
+	return range;
+}
+
 proto.setSelection = function ( range ) {
+
     if ( range ) {
         // iOS bug: if you don't focus the iframe before setting the
         // selection, you can end up in a state where you type but the input
         // doesn't get directed into the contenteditable area but is instead
         // lost in a black hole. Very strange.
+    	range = this._ensureRangeWithin(range);
         if ( isIOS ) {
-            this._win.focus();
+            this._body.focus();
         }
         var sel = this._getWindowSelection();
         if ( sel ) {
@@ -2501,6 +2568,9 @@ proto.getSelection = function () {
         if ( endContainer && isLeaf( endContainer ) ) {
             selection.setEndBefore( endContainer );
         }
+        //ensure selection within range...
+        selection = this._ensureRangeWithin(selection);
+
         this._lastSelection = selection;
     } else {
         selection = this._lastSelection;
@@ -2632,7 +2702,7 @@ proto.focus = function () {
     if ( !isPresto ) {
         this._body.focus();
     }
-    this._win.focus();
+    this._body.focus();
     return this;
 };
 
@@ -3681,7 +3751,7 @@ proto.insertHTML = function ( html, isPaste ) {
         }
 
         if ( !event.defaultPrevented ) {
-            insertTreeFragmentIntoRange( range, event.fragment );
+            insertTreeFragmentIntoRange( range, event.fragment, this._body );
             if ( !canObserveMutations ) {
                 this._docWasChanged();
             }
@@ -3885,7 +3955,7 @@ proto.removeAllFormatting = function ( range ) {
     if ( !range && !( range = this.getSelection() ) || range.collapsed ) {
         return this;
     }
-
+    //TODO: fko [RTE] ensure range within body (body==editorDiv)
     var stopNode = range.commonAncestorContainer;
     while ( stopNode && !isBlock( stopNode ) ) {
         stopNode = stopNode.parentNode;
@@ -3893,6 +3963,10 @@ proto.removeAllFormatting = function ( range ) {
     if ( !stopNode ) {
         expandRangeToBlockBoundaries( range );
         stopNode = this._body;
+    }
+    //TODO: fko [RTE] Correct?
+    if(! isChildOf(this._body, stopNode)){
+    	stopNode = this._body;
     }
     if ( stopNode.nodeType === TEXT_NODE ) {
         return this;
