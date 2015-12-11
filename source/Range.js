@@ -80,7 +80,7 @@ var insertNodeInRange = function ( range, node ) {
     range.setEnd( endContainer, endOffset );
 };
 
-var extractContentsOfRange = function ( range, common ) {
+proto.extractContentsOfRange = function ( range, common ) {
     var startContainer = range.startContainer,
         startOffset = range.startOffset,
         endContainer = range.endContainer,
@@ -94,8 +94,8 @@ var extractContentsOfRange = function ( range, common ) {
         common = common.parentNode;
     }
 
-    var endNode = split( endContainer, endOffset, common ),
-        startNode = split( startContainer, startOffset, common ),
+    var endNode = this.split( endContainer, endOffset, common ),
+        startNode = this.split( startContainer, startOffset, common ),
         frag = common.ownerDocument.createDocumentFragment(),
         next, before, after;
 
@@ -127,12 +127,12 @@ var extractContentsOfRange = function ( range, common ) {
     range.setStart( startContainer, startOffset );
     range.collapse( true );
 
-    fixCursor( common );
+    this.fixCursor( common );
 
     return frag;
 };
 
-var deleteContentsOfRange = function ( range ) {
+proto.deleteContentsOfRange = function ( range ) {
     // Move boundaries up as much as possible to reduce need to split.
     // But we need to check whether we've moved the boundary outside of a
     // block. If so, the entire block will be removed, so we shouldn't merge
@@ -145,7 +145,7 @@ var deleteContentsOfRange = function ( range ) {
             ( isInline( endBlock ) || isBlock( endBlock ) );
 
     // Remove selected range
-    extractContentsOfRange( range );
+    this.extractContentsOfRange( range );
 
     // Move boundaries back down tree so that they are inside the blocks.
     // If we don't do this, the range may be collapsed to a point between
@@ -163,14 +163,14 @@ var deleteContentsOfRange = function ( range ) {
 
     // Ensure block has necessary children
     if ( startBlock ) {
-        fixCursor( startBlock );
+        this.fixCursor( startBlock );
     }
 
     // Ensure body has a block-level element in it.
     var body = range.endContainer.ownerDocument.body,
         child = body.firstChild;
     if ( !child || child.nodeName === 'BR' ) {
-        fixCursor( body );
+        this.fixCursor( body );
         range.selectNodeContents( body.firstChild );
     } else {
         range.collapse( false );
@@ -179,7 +179,7 @@ var deleteContentsOfRange = function ( range ) {
 
 // ---
 
-var insertTreeFragmentIntoRange = function ( range, frag, body ) {
+proto.insertTreeFragmentIntoRange = function ( range, frag, body ) {
     // Check if it's all inline content
     var allInline = true,
         children = frag.childNodes,
@@ -193,7 +193,7 @@ var insertTreeFragmentIntoRange = function ( range, frag, body ) {
 
     // Delete any selected content
     if ( !range.collapsed ) {
-        deleteContentsOfRange( range );
+        this.deleteContentsOfRange( range );
     }
 
     // Move range down into text nodes
@@ -207,8 +207,8 @@ var insertTreeFragmentIntoRange = function ( range, frag, body ) {
         // Otherwise...
         // 1. Split up to blockquote (if a parent) or body
         var splitPoint = range.startContainer,
-            nodeAfterSplit = split( splitPoint, range.startOffset,
-                getNearestWithin( splitPoint.parentNode, body, 'BLOCKQUOTE' ) ||
+            nodeAfterSplit = this.split( splitPoint, range.startOffset,
+            		this.getNearest( splitPoint.parentNode, 'BLOCKQUOTE' ) ||
                 body ),
             nodeBeforeSplit = nodeAfterSplit.previousSibling,
             startContainer = nodeBeforeSplit,
@@ -246,7 +246,7 @@ var insertTreeFragmentIntoRange = function ( range, frag, body ) {
         // 3. Fix cursor then insert block(s) in the fragment
         node = frag;
         while ( node = getNextBlock( node ) ) {
-            fixCursor( node );
+            this.fixCursor( node );
         }
         parent.insertBefore( frag, nodeAfterSplit );
 
@@ -260,7 +260,7 @@ var insertTreeFragmentIntoRange = function ( range, frag, body ) {
                 parent.removeChild( node );
                 node = parent;
             } while ( parent && !parent.lastChild &&
-                parent.nodeName !== 'BODY' );
+            	parent !== this._body );
         }
         if ( !nodeBeforeSplit.parentNode ) {
             nodeBeforeSplit = next.previousSibling;
@@ -272,7 +272,7 @@ var insertTreeFragmentIntoRange = function ( range, frag, body ) {
         }
         // Merge inserted containers with edges of split
         if ( isContainer( next ) ) {
-            mergeContainers( next );
+            this.mergeContainers( next );
         }
 
         prev = nodeAfterSplit.previousSibling;
@@ -284,7 +284,7 @@ var insertTreeFragmentIntoRange = function ( range, frag, body ) {
                 parent.removeChild( node );
                 node = parent;
             } while ( parent && !parent.lastChild &&
-                parent.nodeName !== 'BODY' );
+            	parent !== this._body );
         }
         if ( !nodeAfterSplit.parentNode ) {
             nodeAfterSplit = prev.nextSibling;
@@ -295,7 +295,7 @@ var insertTreeFragmentIntoRange = function ( range, frag, body ) {
         }
         // Merge inserted containers with edges of split
         if ( nodeAfterSplit && isContainer( nodeAfterSplit ) ) {
-            mergeContainers( nodeAfterSplit );
+            this.mergeContainers( nodeAfterSplit );
         }
 
         range.setStart( startContainer, startOffset );

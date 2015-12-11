@@ -1,22 +1,5 @@
 /*jshint strict:false, undef:false, unused:false */
 
-var instances = [];
-
-function getSquireInstance ( doc ) {
-    var l = instances.length,
-        instance;
-    while ( l-- ) {
-        instance = instances[l];
-        //TODO: fko [RTE] how to implement this?
-        // function is called from lots of locations
-        // usually with the doc of a node
-        if ( instance._doc === doc ) {
-            return instance;
-        }
-    }
-    return null;
-}
-
 function mergeObjects ( base, extras ) {
     var prop, value;
     if ( !base ) {
@@ -51,6 +34,7 @@ function Squire ( div, doc, config ) {
         this.addEventListener( 'beforedeactivate', this.getSelection );
     }
 
+
     this._hasZWS = false;
 
     this._lastAnchorNode = null;
@@ -62,6 +46,8 @@ function Squire ( div, doc, config ) {
 
     this._editorDiv.addEventListener( 'focus', this, false );
     this._editorDiv.addEventListener( 'blur', this, false );
+
+    this.addEventListener( 'blur', this.getSelection );
 
     this._undoIndex = -1;
     this._undoStack = [];
@@ -108,8 +94,6 @@ function Squire ( div, doc, config ) {
     // I think IE10 does not have the same bug, but it doesn't hurt to replace
     // its native fn too and then we don't need yet another UA category.
     if ( isIElt11 ) {
-    	//TODO: fko [RTE] use polyfill?
-
         win.Text.prototype.splitText = function ( offset ) {
             var afterSplit = this.ownerDocument.createTextNode(
                     this.data.slice( offset ) ),
@@ -136,10 +120,6 @@ function Squire ( div, doc, config ) {
         doc.execCommand( 'enableInlineTableEditing', false, 'false' );
     } catch ( error ) {}
 
-    instances.push( this );
-
-    // Need to register instance before calling setHTML, so that the fixCursor
-    // function can lookup any default block tag options set.
     this.setHTML( '' );
 }
 
@@ -171,7 +151,7 @@ proto.createElement = function ( tag, props, children ) {
 
 proto.createDefaultBlock = function ( children ) {
     var config = this._config;
-    return fixCursor(
+    return this.fixCursor(
         this.createElement( config.blockTag, config.blockAttributes, children )
     );
 };
@@ -225,8 +205,7 @@ proto.fireEvent = function ( type, event ) {
 };
 
 proto.destroy = function () {
-    var win = this._win,
-        doc = this._doc,
+    var doc = this._doc,
         events = this._events,
         type;
     this._body.removeEventListener( 'focus', this, false );
@@ -238,12 +217,6 @@ proto.destroy = function () {
     }
     if ( this._mutation ) {
         this._mutation.disconnect();
-    }
-    var l = instances.length;
-    while ( l-- ) {
-        if ( instances[l] === this ) {
-            instances.splice( l, 1 );
-        }
     }
 };
 
@@ -263,7 +236,6 @@ proto.addEventListener = function ( type, fn ) {
     if ( !handlers ) {
         handlers = this._events[ type ] = [];
         if ( !customEvents[ type ] ) {
-        	//TODO: fko: [RTE] add listeners to div? Possible for all events?
             this._body.addEventListener( type, this, true );
         }
     }
@@ -298,17 +270,16 @@ proto._createRange =
     if ( range instanceof this._win.Range ) {
         return range.cloneRange();
     }
-    //TODO: fko [RTE] assert that range is within editorDiv?
     var domRange = this._doc.createRange();
     // range seems to be a node in this case...
     // make sure range is contained within our editor div.
-    if(! isChildOf(this._body, range)){
+    if(! isChildOf(this._body, range, true)){
     	range = this._body;
     	startOffset = 0;
     }
     domRange.setStart( range, startOffset );
     if ( endContainer ) {
-    	if(! isChildOf(this._body, endContainer)){
+    	if(! isChildOf(this._body, endContainer, true)){
     		endContainer = this._body;
     		endOffset = this._body.childNodes.length;
     	}
@@ -368,15 +339,18 @@ proto._ensureRangeWithin = function (range) {
 	var start = range.startContainer,
 	end = range.endContainer;
 
-	if(!isChildOf(this._body, start) && !isChildOf(this._body, end)){
+	if(!isChildOf(this._body, start, true) && !isChildOf(this._body, end, true)){
 		//completely outside our editor.
-		return null; //TODO: fko [RTE] just for debug purposes. Find default afterwards.
+		//fallback to a default: I suggest cursor at beginning.
+		range.setStart(this._body, 0);
+		range.setEnd(this._body, 0);
+		return range;
 	}
 
-	if(! isChildOf(this._body, start)){
+	if(! isChildOf(this._body, start, true)){
 		range.setStart(this._body, 0);
 	}
-	if(! isChildOf(this._body, end)){
+	if(! isChildOf(this._body, end, true)){
 		range.setEnd(this._body, this._body.childNodes.length);
 	}
 	return range;
@@ -403,9 +377,18 @@ proto.setSelection = function ( range ) {
     return this;
 };
 
+proto._isSelectionWithinEditor = function(range){
+	if(!range){
+		return false;
+	}
+	var start = range.startContainer, end = range.endContainer;
+	return (isChildOf(this._body, start, true) && isChildOf(this._body, end, true));
+};
+
 proto._getWindowSelection = function () {
     return this._win.getSelection() || null;
 };
+
 
 proto.getSelection = function () {
     var sel = this._getWindowSelection(),
@@ -422,9 +405,13 @@ proto.getSelection = function () {
             selection.setEndBefore( endContainer );
         }
         //ensure selection within range...
-        selection = this._ensureRangeWithin(selection);
 
-        this._lastSelection = selection;
+        if( this._isSelectionWithinEditor(selection) ){
+        	this._lastSelection = selection;
+    	}
+        else{
+        	selection = this._lastSelection;
+        }
     } else {
         selection = this._lastSelection;
     }
@@ -511,6 +498,7 @@ var removeZWS = function ( root ) {
 proto._didAddZWS = function () {
     this._hasZWS = true;
 };
+
 proto._removeZWS = function () {
     if ( !this._hasZWS ) {
         return;
@@ -567,7 +555,7 @@ proto.blur = function () {
     if ( isGecko ) {
         this._body.blur();
     }
-    top.focus();
+    this._body.blur();
     return this;
 };
 
@@ -776,7 +764,7 @@ proto.hasFormat = function ( tag, attributes, range ) {
     // have the format.
     var root = range.commonAncestorContainer,
         walker, node;
-    if ( getNearest( root, tag, attributes ) ) {
+    if ( this.getNearest( root, tag, attributes ) ) {
         return true;
     }
 
@@ -794,7 +782,7 @@ proto.hasFormat = function ( tag, attributes, range ) {
 
     var seenNode = false;
     while ( node = walker.nextNode() ) {
-        if ( !getNearest( node, tag, attributes ) ) {
+        if ( !this.getNearest( node, tag, attributes ) ) {
             return false;
         }
         seenNode = true;
@@ -854,7 +842,7 @@ proto._addFormat = function ( tag, attributes, range ) {
         node, needsFormat;
 
     if ( range.collapsed ) {
-        el = fixCursor( this.createElement( tag, attributes ) );
+        el = this.fixCursor( this.createElement( tag, attributes ) );
         insertNodeInRange( range, el );
         range.setStart( el.firstChild, el.firstChild.length );
         range.collapse( true );
@@ -907,7 +895,7 @@ proto._addFormat = function ( tag, attributes, range ) {
 
         do {
             node = walker.currentNode;
-            needsFormat = !getNearest( node, tag, attributes );
+            needsFormat = !this.getNearest( node, tag, attributes );
             if ( needsFormat ) {
                 // <br> can never be a container node, so must have a text node
                 // if node == (end|start)Container
@@ -1106,7 +1094,7 @@ var tagAfterSplit = {
 var splitBlock = function ( self, block, node, offset ) {
     var splitTag = tagAfterSplit[ block.nodeName ],
         splitProperties = null,
-        nodeAfterSplit = split( node, offset, block.parentNode ),
+        nodeAfterSplit = self.split( node, offset, block.parentNode ),
         config = self._config;
 
     if ( !splitTag ) {
@@ -1180,16 +1168,16 @@ proto.modifyBlocks = function ( modify, range ) {
     var body = this._body,
         frag;
     moveRangeBoundariesUpTree( range, body );
-    frag = extractContentsOfRange( range, body );
+    frag = this.extractContentsOfRange( range, body );
 
     // 4. Modify tree of fragment and reinsert.
     insertNodeInRange( range, modify.call( this, frag ) );
 
     // 5. Merge containers at edges
     if ( range.endOffset < range.endContainer.childNodes.length ) {
-        mergeContainers( range.endContainer.childNodes[ range.endOffset ] );
+        this.mergeContainers( range.endContainer.childNodes[ range.endOffset ] );
     }
-    mergeContainers( range.startContainer.childNodes[ range.startOffset ] );
+    this.mergeContainers( range.startContainer.childNodes[ range.startOffset ] );
 
     // 6. Restore selection
     this._getRangeAndRemoveBookmark( range );
@@ -1212,9 +1200,9 @@ var increaseBlockQuoteLevel = function ( frag ) {
 };
 
 var decreaseBlockQuoteLevel = function ( frag ) {
-    var blockquotes = frag.querySelectorAll( 'blockquote' );
+    var blockquotes = frag.querySelectorAll( 'blockquote' ), self = this;
     Array.prototype.filter.call( blockquotes, function ( el ) {
-        return !getNearest( el.parentNode, 'BLOCKQUOTE' );
+        return !self.getNearest( el.parentNode, 'BLOCKQUOTE' );
     }).forEach( function ( el ) {
         replaceWith( el, empty( el ) );
     });
@@ -1298,7 +1286,7 @@ var removeList = function ( frag ) {
             child = children[ll];
             replaceWith( child, empty( child ) );
         }
-        fixContainer( listFrag );
+        this.fixContainer( listFrag );
         replaceWith( list, listFrag );
     }
     return frag;
@@ -1344,7 +1332,7 @@ var decreaseListLevel = function ( frag ) {
             node = first,
             next;
         if ( item.previousSibling ) {
-            parent = split( parent, item, newParent );
+            parent = this.split( parent, item, newParent );
         }
         while ( node ) {
             next = node.nextSibling;
@@ -1355,7 +1343,7 @@ var decreaseListLevel = function ( frag ) {
             node = next;
         }
         if ( newParent.nodeName === 'LI' && first.previousSibling ) {
-            split( newParent, first, newParent.parentNode );
+            this.split( newParent, first, newParent.parentNode );
         }
         while ( item !== frag && !item.childNodes.length ) {
             parent = item.parentNode;
@@ -1363,7 +1351,7 @@ var decreaseListLevel = function ( frag ) {
             item = parent;
         }
     }, this );
-    fixContainer( frag );
+    this.fixContainer( frag );
     return frag;
 };
 
@@ -1393,7 +1381,7 @@ proto._setHTML = function ( html ) {
     var node = this._body;
     node.innerHTML = html;
     do {
-        fixCursor( node );
+        this.fixCursor( node );
     } while ( node = getNextBlock( node ) );
     this._ignoreChange = true;
 };
@@ -1437,14 +1425,14 @@ proto.setHTML = function ( html ) {
     frag.appendChild( empty( div ) );
 
     cleanTree( frag );
-    cleanupBRs( frag );
+    this.cleanupBRs( frag );
 
-    fixContainer( frag );
+    this.fixContainer( frag );
 
     // Fix cursor
     var node = frag;
     while ( node = getNextBlock( node ) ) {
-        fixCursor( node );
+        this.fixCursor( node );
     }
 
     // Don't fire an input event
@@ -1458,7 +1446,7 @@ proto.setHTML = function ( html ) {
 
     // And insert new content
     body.appendChild( frag );
-    fixCursor( body );
+    this.fixCursor( body );
 
     // Reset the undo stack
     this._undoIndex = -1;
@@ -1503,7 +1491,7 @@ proto.insertElement = function ( el, range ) {
         // If in the middle of a container node, split up to body.
         if ( splitNode !== body ) {
             parent = splitNode.parentNode;
-            nodeAfterSplit = split( parent, splitNode.nextSibling, body );
+            nodeAfterSplit = this.split( parent, splitNode.nextSibling, body );
         }
         if ( nodeAfterSplit ) {
             body.insertBefore( el, nodeAfterSplit );
@@ -1533,11 +1521,12 @@ proto.insertImage = function ( src, attributes ) {
 
 var linkRegExp = /\b((?:(?:ht|f)tps?:\/\/|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,}\/)(?:[^\s()<>]+|\([^\s()<>]+\))+(?:\((?:[^\s()<>]+|(?:\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'".,<>?«»“”‘’]))|([\w\-.%+]+@(?:[\w\-]+\.)+[A-Z]{2,}\b)/i;
 
-var addLinks = function ( frag ) {
+proto.addLinks = function ( frag ) {
     var doc = frag.ownerDocument,
+    	self = this,
         walker = new TreeWalker( frag, SHOW_TEXT,
                 function ( node ) {
-            return !getNearest( node, 'A' );
+            return !self.getNearest( node, 'A' );
         }, false ),
         node, data, parent, match, index, endIndex, child;
     while ( node = walker.nextNode() ) {
@@ -1589,14 +1578,14 @@ proto.insertHTML = function ( html, isPaste ) {
             defaultPrevented: false
         };
 
-        addLinks( frag );
+        this.addLinks( frag );
         cleanTree( frag );
-        cleanupBRs( frag );
+        this.cleanupBRs( frag );
         removeEmptyInlines( frag );
         frag.normalize();
 
         while ( node = getNextBlock( node ) ) {
-            fixCursor( node );
+            this.fixCursor( node );
         }
 
         if ( isPaste ) {
@@ -1604,7 +1593,7 @@ proto.insertHTML = function ( html, isPaste ) {
         }
 
         if ( !event.defaultPrevented ) {
-            insertTreeFragmentIntoRange( range, event.fragment, this._body );
+            this.insertTreeFragmentIntoRange( range, event.fragment, this._body );
             if ( !canObserveMutations ) {
                 this._docWasChanged();
             }
@@ -1808,7 +1797,6 @@ proto.removeAllFormatting = function ( range ) {
     if ( !range && !( range = this.getSelection() ) || range.collapsed ) {
         return this;
     }
-    //TODO: fko [RTE] ensure range within body (body==editorDiv)
     var stopNode = range.commonAncestorContainer;
     while ( stopNode && !isBlock( stopNode ) ) {
         stopNode = stopNode.parentNode;
@@ -1817,7 +1805,6 @@ proto.removeAllFormatting = function ( range ) {
         expandRangeToBlockBoundaries( range );
         stopNode = this._body;
     }
-    //TODO: fko [RTE] Correct?
     if(! isChildOf(this._body, stopNode)){
     	stopNode = this._body;
     }
@@ -1845,8 +1832,8 @@ proto.removeAllFormatting = function ( range ) {
     // in same container.
     var formattedNodes = doc.createDocumentFragment();
     var cleanNodes = doc.createDocumentFragment();
-    var nodeAfterSplit = split( endContainer, endOffset, stopNode );
-    var nodeInSplit = split( startContainer, startOffset, stopNode );
+    var nodeAfterSplit = this.split( endContainer, endOffset, stopNode );
+    var nodeInSplit = this.split( startContainer, startOffset, stopNode );
     var nextNode, _range, childNodes;
 
     // Then replace contents in split with a cleaned version of the same:

@@ -314,7 +314,7 @@ var isLineBreak = function ( br ) {
 // line breaks by wrapping the inline text in a <div>. Browsers that want <br>
 // elements at the end of each block will then have them added back in a later
 // fixCursor method call.
-var cleanupBRs = function ( root ) {
+proto.cleanupBRs = function ( root ) {
     var brs = root.querySelectorAll( 'BR' ),
         brBreaksLine = [],
         l = brs.length,
@@ -340,7 +340,7 @@ var cleanupBRs = function ( root ) {
         if ( !brBreaksLine[l] ) {
             detach( br );
         } else if ( !isInline( parent ) ) {
-            fixContainer( parent );
+            this.fixContainer( parent );
         }
     }
 };

@@ -6,14 +6,19 @@ var leafNodeNames = {
     BR: 1,
     IMG: 1,
     INPUT: 1
-};
+},
+proto = Squire.prototype;
 
-function isChildOf(parent, child) {
-	if(parent && child){
-		if(parent === child){
+//if nodes are the same, will return false
+function isChildOf(parent, child, inclusive) {
+	inclusive = !!inclusive;
+	var n = inclusive ? child : child.parentNode;
+
+	while(n != null){
+		if(n === parent){
 			return true;
 		}
-		return parent.contains(child);
+		n = n.parentNode;
 	}
 	return false;
 }
@@ -84,9 +89,9 @@ function getNextBlock ( node ) {
     return getBlockWalker( node ).nextNode();
 }
 
-function getNearestWithin(node, stopNode, tag, attributes ){
+proto.getNearest = function (node, tag, attributes ){
 	do {
-		if(! isChildOf(stopNode, node)){
+		if(! isChildOf(this._body, node)){
 			return null;
 		}
 		if ( hasTagAttributes( node, tag, attributes ) ) {
@@ -96,14 +101,6 @@ function getNearestWithin(node, stopNode, tag, attributes ){
 	return null;
 }
 
-function getNearest ( node, tag, attributes ) {
-    do {
-        if ( hasTagAttributes( node, tag, attributes ) ) {
-            return node;
-        }
-    } while ( node = node.parentNode );
-    return null;
-}
 
 function getPath ( node ) {
     var parent = node.parentNode,
@@ -181,7 +178,7 @@ function createElement ( doc, tag, props, children ) {
     return el;
 }
 
-function fixCursor ( node ) {
+proto.fixCursor = function ( node ) {
     // In Webkit and Gecko, block level elements are collapsed and
     // unfocussable if they have no content. To remedy this, a <BR> must be
     // inserted. In Opera and IE, we just need a textnode in order for the
@@ -190,9 +187,9 @@ function fixCursor ( node ) {
         root = node,
         fixer, child;
 
-    if ( node.nodeName === 'BODY' ) {
+    if ( node === this._body) {
         if ( !( child = node.firstChild ) || child.nodeName === 'BR' ) {
-            fixer = getSquireInstance( doc ).createDefaultBlock();
+            fixer = this.createDefaultBlock();
             if ( child ) {
                 node.replaceChild( fixer, child );
             }
@@ -214,7 +211,7 @@ function fixCursor ( node ) {
         if ( !child ) {
             if ( cantFocusEmptyTextNodes ) {
                 fixer = doc.createTextNode( ZWS );
-                getSquireInstance( doc )._didAddZWS();
+                this._didAddZWS();
             } else {
                 fixer = doc.createTextNode( '' );
             }
@@ -254,12 +251,12 @@ function fixCursor ( node ) {
 }
 
 // Recursively examine container nodes and wrap any inline children.
-function fixContainer ( container ) {
+proto.fixContainer = function ( container ) {
     var children = container.childNodes,
         doc = container.ownerDocument,
         wrapper = null,
         i, l, child, isBR,
-        config = getSquireInstance( doc )._config;
+        config = this._config;
 
     for ( i = 0, l = children.length; i < l; i += 1 ) {
         child = children[i];
@@ -277,7 +274,7 @@ function fixContainer ( container ) {
                 wrapper = createElement( doc,
                     config.blockTag, config.blockAttributes );
             }
-            fixCursor( wrapper );
+            this.fixCursor( wrapper );
             if ( isBR ) {
                 container.replaceChild( wrapper, child );
             } else {
@@ -288,20 +285,20 @@ function fixContainer ( container ) {
             wrapper = null;
         }
         if ( isContainer( child ) ) {
-            fixContainer( child );
+            this.fixContainer( child );
         }
     }
     if ( wrapper ) {
-        container.appendChild( fixCursor( wrapper ) );
+        container.appendChild( this.fixCursor( wrapper ) );
     }
     return container;
 }
 
-function split ( node, offset, stopNode ) {
+proto.split = function ( node, offset, stopNode ) {
     var nodeType = node.nodeType,
         parent, clone, next;
     if ( nodeType === TEXT_NODE && node !== stopNode ) {
-        return split( node.parentNode, node.splitText( offset ), stopNode );
+        return this.split( node.parentNode, node.splitText( offset ), stopNode );
     }
     if ( nodeType === ELEMENT_NODE ) {
         if ( typeof( offset ) === 'number' ) {
@@ -324,7 +321,7 @@ function split ( node, offset, stopNode ) {
         }
 
         // Maintain li numbering if inside a quote.
-        if ( node.nodeName === 'OL' && getNearest( node, 'BLOCKQUOTE' ) ) {
+        if ( node.nodeName === 'OL' && this.getNearest( node, 'BLOCKQUOTE' ) ) {
             clone.start = ( +node.start || 1 ) + node.childNodes.length - 1;
         }
 
@@ -332,8 +329,8 @@ function split ( node, offset, stopNode ) {
         // of a node lower down the tree!
 
         // We need something in the element in order for the cursor to appear.
-        fixCursor( node );
-        fixCursor( clone );
+        this.fixCursor( node );
+        this.fixCursor( clone );
 
         // Inject clone after original node
         if ( next = node.nextSibling ) {
@@ -343,7 +340,7 @@ function split ( node, offset, stopNode ) {
         }
 
         // Keep on splitting up the tree
-        return split( parent, clone, stopNode );
+        return this.split( parent, clone, stopNode );
     }
     return offset;
 }
@@ -448,7 +445,7 @@ function mergeWithBlock ( block, next, range ) {
     }
 }
 
-function mergeContainers ( node ) {
+proto.mergeContainers = function ( node ) {
     var prev = node.previousSibling,
         first = node.firstChild,
         doc = node.ownerDocument,
@@ -474,14 +471,14 @@ function mergeContainers ( node ) {
         needsFix = !isContainer( node );
         prev.appendChild( empty( node ) );
         if ( needsFix ) {
-            fixContainer( prev );
+            this.fixContainer( prev );
         }
         if ( first ) {
-            mergeContainers( first );
+            this.mergeContainers( first );
         }
     } else if ( isListItem ) {
         prev = createElement( doc, 'DIV' );
         node.insertBefore( prev, first );
-        fixCursor( prev );
+        this.fixCursor( prev );
     }
 }
