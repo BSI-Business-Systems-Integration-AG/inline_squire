@@ -4,3 +4,6 @@
 ( function ( doc, undefined ) {
 
 "use strict";
+
+/* jshint boss: true */
+

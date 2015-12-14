@@ -16,7 +16,7 @@ function mergeObjects ( base, extras ) {
 
 function Squire ( div, doc, config ) {
     var win = doc.defaultView;
-    var body = doc.body;
+    var body = div;
     var mutation;
 
     this._win = win;
@@ -40,6 +40,15 @@ function Squire ( div, doc, config ) {
     this._lastAnchorNode = null;
     this._lastFocusNode = null;
     this._path = '';
+
+
+    //<CUSTOMIZED>
+    this._lastActiveNode = null;
+
+    this.enabled = true;  //true by default
+    this._inactiveKeyHandlers = null;
+    this._inactiveEvents = null;
+    //</CUSTOMIZED>
 
     this.addEventListener( 'keyup', this._updatePathOnEvent );
     this.addEventListener( 'mouseup', this._updatePathOnEvent );
@@ -123,8 +132,6 @@ function Squire ( div, doc, config ) {
     this.setHTML( '' );
 }
 
-var proto = Squire.prototype;
-
 proto.setConfig = function ( config ) {
     config = mergeObjects({
         blockTag: 'DIV',
@@ -145,6 +152,44 @@ proto.setConfig = function ( config ) {
     return this;
 };
 
+
+//<CUSTOMIZED>
+proto.setEnabled = function (enabled) {
+  // backup all key handlers, so that they are not active if field is disabled.
+  // also, make document not editable.
+  enabled = !!enabled;
+  if(this.enabled === enabled){
+    //nop
+    return;
+  }
+
+  this.enabled = enabled;
+
+  var body = this._body;
+  if(enabled){
+    if(this._inactiveKeyHandlers){
+      this._keyHandlers = this._inactiveKeyHandlers;
+      this._inactiveKeyHandlers = null;
+    }
+    if(this._inactiveEvents){
+      this._events = this._inactiveEvents;
+      this._inactiveEvents = null;
+    }
+    body.setAttribute( 'contenteditable', 'true' );
+  }
+  else {
+//    this.moveCursorToStart();
+    body.setAttribute( 'contenteditable', 'false' );
+    this._inactiveKeyHandlers = this._keyHandlers;
+    this._keyHandlers = [];
+    this._inactiveEvents = this._events;
+    this._events = [];
+  }
+
+};
+//</CUSTOMIZED>
+
+
 proto.createElement = function ( tag, props, children ) {
     return createElement( this._doc, tag, props, children );
 };
@@ -157,7 +202,7 @@ proto.createDefaultBlock = function ( children ) {
 };
 
 proto.didError = function ( error ) {
-    console.log( error );
+    console.log( error ); //jshint ignore: line
 };
 
 proto.getDocument = function () {
@@ -354,7 +399,7 @@ proto._ensureRangeWithin = function (range) {
 		range.setEnd(this._body, this._body.childNodes.length);
 	}
 	return range;
-}
+};
 
 proto.setSelection = function ( range ) {
 
@@ -527,6 +572,17 @@ proto._updatePath = function ( range, force ) {
     if ( !range.collapsed ) {
         this.fireEvent( 'select' );
     }
+  //<CUSTOMIZED>
+    if( anchor === focus && range.collapsed ) {
+      if(focus !== this._lastActiveNode){
+        this._lastActiveNode = focus;
+        this.fireEvent('activeNodeChange', {});
+      }
+    }
+    else{
+      this._lastActiveNode = null;
+    }
+    //</CUSTOMIZED>
 };
 
 proto._updatePathOnEvent = function () {
@@ -1737,6 +1793,17 @@ proto.setTextColour = function ( colour ) {
     return this.focus();
 };
 
+//<CUSTOMIZED>
+proto.removeTextColour = function () {
+  this.changeFormat(null,
+  {
+      tag: 'SPAN',
+      attributes: { 'class': 'colour' }
+  });
+  return this.focus();
+};
+//</CUSTOMIZED>
+
 proto.setHighlightColour = function ( colour ) {
     this.changeFormat({
         tag: 'SPAN',
@@ -1750,6 +1817,17 @@ proto.setHighlightColour = function ( colour ) {
     });
     return this.focus();
 };
+
+//<CUSTOMIZED>
+proto.removeHighlightColour = function () {
+  this.changeFormat(null,
+    {
+        tag: 'SPAN',
+        attributes: { 'class': 'highlight' }
+    });
+  return this.focus();
+};
+//</CUSTOMIZED>
 
 proto.setTextAlignment = function ( alignment ) {
     this.forEachBlock( function ( block ) {

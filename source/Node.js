@@ -8,13 +8,12 @@ var leafNodeNames = {
     INPUT: 1
 },
 proto = Squire.prototype;
-
 //if nodes are the same, will return false
 function isChildOf(parent, child, inclusive) {
 	inclusive = !!inclusive;
 	var n = inclusive ? child : child.parentNode;
 
-	while(n != null){
+	while(n !== null){
 		if(n === parent){
 			return true;
 		}
@@ -40,9 +39,16 @@ function hasTagAttributes ( node, tag, attributes ) {
         return false;
     }
     for ( var attr in attributes ) {
-        if ( node.getAttribute( attr ) !== attributes[ attr ] ) {
+    	//<CUSTOMIZED>
+        // Internet explorer seems to put a semicolon at the end of a style attribute,
+        // even if we use setAttribute and the attribute contains no semicolon at all...
+        var nodeAttr = node.getAttribute(attr).replace(/[;]$/, ''),
+        queryAttr = attributes[attr].replace(/[;]$/, '');
+
+        if ( nodeAttr !== queryAttr ) {
             return false;
         }
+        //</CUSTOMIZED>
     }
     return true;
 }
@@ -99,7 +105,7 @@ proto.getNearest = function (node, tag, attributes ){
         }
 	} while ( node = node.parentNode );
 	return null;
-}
+};
 
 
 function getPath ( node ) {
@@ -248,7 +254,7 @@ proto.fixCursor = function ( node ) {
     }
 
     return root;
-}
+};
 
 // Recursively examine container nodes and wrap any inline children.
 proto.fixContainer = function ( container ) {
@@ -292,7 +298,7 @@ proto.fixContainer = function ( container ) {
         container.appendChild( this.fixCursor( wrapper ) );
     }
     return container;
-}
+};
 
 proto.split = function ( node, offset, stopNode ) {
     var nodeType = node.nodeType,
@@ -343,7 +349,7 @@ proto.split = function ( node, offset, stopNode ) {
         return this.split( parent, clone, stopNode );
     }
     return offset;
-}
+};
 
 function mergeInlines ( node, range ) {
     if ( node.nodeType !== ELEMENT_NODE ) {
@@ -481,4 +487,4 @@ proto.mergeContainers = function ( node ) {
         node.insertBefore( prev, first );
         this.fixCursor( prev );
     }
-}
+};

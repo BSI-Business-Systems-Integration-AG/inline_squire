@@ -1,9 +1,9 @@
 /*jshint ignore:start */
 
 if ( typeof exports === 'object' ) {
-    module.exports = Squire;
-} else if ( typeof define === 'function' && define.amd ) {
-    define( function () {
+    module.exports = Squire; //jshint ignore:line
+} else if ( typeof define === 'function' && define.amd ) { //jshint ignore:line
+    define( function () { //jshint ignore:line
         return Squire;
     });
 } else {

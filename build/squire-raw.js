@@ -4,6 +4,9 @@
 
 "use strict";
 
+/* jshint boss: true */
+
+
 var DOCUMENT_POSITION_PRECEDING = 2; // Node.DOCUMENT_POSITION_PRECEDING
 var ELEMENT_NODE = 1;                // Node.ELEMENT_NODE;
 var TEXT_NODE = 3;                   // Node.TEXT_NODE;
@@ -177,13 +180,12 @@ var leafNodeNames = {
     INPUT: 1
 },
 proto = Squire.prototype;
-
 //if nodes are the same, will return false
 function isChildOf(parent, child, inclusive) {
 	inclusive = !!inclusive;
 	var n = inclusive ? child : child.parentNode;
 
-	while(n != null){
+	while(n !== null){
 		if(n === parent){
 			return true;
 		}
@@ -209,9 +211,16 @@ function hasTagAttributes ( node, tag, attributes ) {
         return false;
     }
     for ( var attr in attributes ) {
-        if ( node.getAttribute( attr ) !== attributes[ attr ] ) {
+    	//<CUSTOMIZED>
+        // Internet explorer seems to put a semicolon at the end of a style attribute,
+        // even if we use setAttribute and the attribute contains no semicolon at all...
+        var nodeAttr = node.getAttribute(attr).replace(/[;]$/, ''),
+        queryAttr = attributes[attr].replace(/[;]$/, '');
+
+        if ( nodeAttr !== queryAttr ) {
             return false;
         }
+        //</CUSTOMIZED>
     }
     return true;
 }
@@ -268,7 +277,7 @@ proto.getNearest = function (node, tag, attributes ){
         }
 	} while ( node = node.parentNode );
 	return null;
-}
+};
 
 
 function getPath ( node ) {
@@ -417,7 +426,7 @@ proto.fixCursor = function ( node ) {
     }
 
     return root;
-}
+};
 
 // Recursively examine container nodes and wrap any inline children.
 proto.fixContainer = function ( container ) {
@@ -461,7 +470,7 @@ proto.fixContainer = function ( container ) {
         container.appendChild( this.fixCursor( wrapper ) );
     }
     return container;
-}
+};
 
 proto.split = function ( node, offset, stopNode ) {
     var nodeType = node.nodeType,
@@ -512,7 +521,7 @@ proto.split = function ( node, offset, stopNode ) {
         return this.split( parent, clone, stopNode );
     }
     return offset;
-}
+};
 
 function mergeInlines ( node, range ) {
     if ( node.nodeType !== ELEMENT_NODE ) {
@@ -650,7 +659,7 @@ proto.mergeContainers = function ( node ) {
         node.insertBefore( prev, first );
         this.fixCursor( prev );
     }
-}
+};
 
 var getNodeBefore = function ( node, offset ) {
     var children = node.childNodes;
@@ -2160,7 +2169,7 @@ function mergeObjects ( base, extras ) {
 
 function Squire ( div, doc, config ) {
     var win = doc.defaultView;
-    var body = doc.body;
+    var body = div;
     var mutation;
 
     this._win = win;
@@ -2184,6 +2193,15 @@ function Squire ( div, doc, config ) {
     this._lastAnchorNode = null;
     this._lastFocusNode = null;
     this._path = '';
+
+
+    //<CUSTOMIZED>
+    this._lastActiveNode = null;
+
+    this.enabled = true;  //true by default
+    this._inactiveKeyHandlers = null;
+    this._inactiveEvents = null;
+    //</CUSTOMIZED>
 
     this.addEventListener( 'keyup', this._updatePathOnEvent );
     this.addEventListener( 'mouseup', this._updatePathOnEvent );
@@ -2267,8 +2285,6 @@ function Squire ( div, doc, config ) {
     this.setHTML( '' );
 }
 
-var proto = Squire.prototype;
-
 proto.setConfig = function ( config ) {
     config = mergeObjects({
         blockTag: 'DIV',
@@ -2289,6 +2305,44 @@ proto.setConfig = function ( config ) {
     return this;
 };
 
+
+//<CUSTOMIZED>
+proto.setEnabled = function (enabled) {
+  // backup all key handlers, so that they are not active if field is disabled.
+  // also, make document not editable.
+  enabled = !!enabled;
+  if(this.enabled === enabled){
+    //nop
+    return;
+  }
+
+  this.enabled = enabled;
+
+  var body = this._body;
+  if(enabled){
+    if(this._inactiveKeyHandlers){
+      this._keyHandlers = this._inactiveKeyHandlers;
+      this._inactiveKeyHandlers = null;
+    }
+    if(this._inactiveEvents){
+      this._events = this._inactiveEvents;
+      this._inactiveEvents = null;
+    }
+    body.setAttribute( 'contenteditable', 'true' );
+  }
+  else {
+//    this.moveCursorToStart();
+    body.setAttribute( 'contenteditable', 'false' );
+    this._inactiveKeyHandlers = this._keyHandlers;
+    this._keyHandlers = [];
+    this._inactiveEvents = this._events;
+    this._events = [];
+  }
+
+};
+//</CUSTOMIZED>
+
+
 proto.createElement = function ( tag, props, children ) {
     return createElement( this._doc, tag, props, children );
 };
@@ -2301,7 +2355,7 @@ proto.createDefaultBlock = function ( children ) {
 };
 
 proto.didError = function ( error ) {
-    console.log( error );
+    console.log( error ); //jshint ignore: line
 };
 
 proto.getDocument = function () {
@@ -2498,7 +2552,7 @@ proto._ensureRangeWithin = function (range) {
 		range.setEnd(this._body, this._body.childNodes.length);
 	}
 	return range;
-}
+};
 
 proto.setSelection = function ( range ) {
 
@@ -2671,6 +2725,17 @@ proto._updatePath = function ( range, force ) {
     if ( !range.collapsed ) {
         this.fireEvent( 'select' );
     }
+  //<CUSTOMIZED>
+    if( anchor === focus && range.collapsed ) {
+      if(focus !== this._lastActiveNode){
+        this._lastActiveNode = focus;
+        this.fireEvent('activeNodeChange', {});
+      }
+    }
+    else{
+      this._lastActiveNode = null;
+    }
+    //</CUSTOMIZED>
 };
 
 proto._updatePathOnEvent = function () {
@@ -3881,6 +3946,17 @@ proto.setTextColour = function ( colour ) {
     return this.focus();
 };
 
+//<CUSTOMIZED>
+proto.removeTextColour = function () {
+  this.changeFormat(null,
+  {
+      tag: 'SPAN',
+      attributes: { 'class': 'colour' }
+  });
+  return this.focus();
+};
+//</CUSTOMIZED>
+
 proto.setHighlightColour = function ( colour ) {
     this.changeFormat({
         tag: 'SPAN',
@@ -3894,6 +3970,17 @@ proto.setHighlightColour = function ( colour ) {
     });
     return this.focus();
 };
+
+//<CUSTOMIZED>
+proto.removeHighlightColour = function () {
+  this.changeFormat(null,
+    {
+        tag: 'SPAN',
+        attributes: { 'class': 'highlight' }
+    });
+  return this.focus();
+};
+//</CUSTOMIZED>
 
 proto.setTextAlignment = function ( alignment ) {
     this.forEachBlock( function ( block ) {
@@ -4035,9 +4122,9 @@ proto.increaseListLevel = command( 'modifyBlocks', increaseListLevel );
 proto.decreaseListLevel = command( 'modifyBlocks', decreaseListLevel );
 
 if ( typeof exports === 'object' ) {
-    module.exports = Squire;
-} else if ( typeof define === 'function' && define.amd ) {
-    define( function () {
+    module.exports = Squire; //jshint ignore:line
+} else if ( typeof define === 'function' && define.amd ) { //jshint ignore:line
+    define( function () { //jshint ignore:line
         return Squire;
     });
 } else {
