@@ -121,7 +121,7 @@ var afterDelete = function ( self, range ) {
             parent.removeChild( node );
             // Fix cursor in block
             if ( !isBlock( parent ) ) {
-                parent = getPreviousBlock( parent );
+                parent = getPreviousBlock( parent, self );
             }
             self.fixCursor( parent );
             // Move cursor into text node
@@ -164,7 +164,7 @@ var keyHandlers = {
             self.deleteContentsOfRange( range );
         }
 
-        block = getStartBlockOfRange( range );
+        block = getStartBlockOfRange( range, self );
 
         // If this is a malformed bit of document or in a table;
         // just play it safe and insert a <br>.
@@ -254,13 +254,13 @@ var keyHandlers = {
             afterDelete( self, range );
         }
         // If at beginning of block, merge with previous
-        else if ( rangeDoesStartAtBlockBoundary( range ) ) {
+        else if ( rangeDoesStartAtBlockBoundary( range, self ) ) {
             event.preventDefault();
-            var current = getStartBlockOfRange( range ),
-                previous = current && getPreviousBlock( current );
+            var current = getStartBlockOfRange( range, self ),
+                previous = current && getPreviousBlock( current, self );
             // Must not be at the very beginning of the text area.
             // Also, must be within editor div.
-            if ( previous && isChildOf(self._body, previous, true)) {
+            if ( previous && isChildOf(self._body, previous)) {
                 // If not editable, just delete whole block.
                 if ( !previous.isContentEditable ) {
                     detach( previous );
@@ -314,10 +314,10 @@ var keyHandlers = {
             afterDelete( self, range );
         }
         // If at end of block, merge next into this block
-        else if ( rangeDoesEndAtBlockBoundary( range ) ) {
+        else if ( rangeDoesEndAtBlockBoundary( range, self ) ) {
             event.preventDefault();
-            var current = getStartBlockOfRange( range ),
-                next = current && getNextBlock( current );
+            var current = getStartBlockOfRange( range, self ),
+                next = current && getNextBlock( current, self );
             // Must not be at the very end of the text area.
             // also, next must not be outside of our editor div.
             if ( next && isChildOf(self._body, next, true)) {
@@ -370,8 +370,8 @@ var keyHandlers = {
         var node, parent;
         self._removeZWS();
         // If no selection and at start of block
-        if ( range.collapsed && rangeDoesStartAtBlockBoundary( range ) ) {
-            node = getStartBlockOfRange( range );
+        if ( range.collapsed && rangeDoesStartAtBlockBoundary( range, self ) ) {
+            node = getStartBlockOfRange( range, self );
             // Iterate through the block's parents
             while ( parent = node.parentNode ) {
                 // If we find a UL or OL (so are in a list, node must be an LI)
@@ -391,7 +391,7 @@ var keyHandlers = {
     'shift-tab': function ( self, event, range ) {
         self._removeZWS();
         // If no selection and at start of block
-        if ( range.collapsed && rangeDoesStartAtBlockBoundary( range ) ) {
+        if ( range.collapsed && rangeDoesStartAtBlockBoundary( range, self ) ) {
             // Break list
             var node = range.startContainer;
             if ( self.getNearest( node, 'UL' ) || self.getNearest( node, 'OL' ) ) {

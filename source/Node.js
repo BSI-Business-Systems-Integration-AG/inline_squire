@@ -8,7 +8,7 @@ var leafNodeNames = {
     INPUT: 1
 },
 proto = Squire.prototype;
-//if nodes are the same, will return false
+//if nodes are the same, will return false, unless inclusive is set to true
 function isChildOf(parent, child, inclusive) {
 	inclusive = !!inclusive;
 	var n = inclusive ? child : child.parentNode;
@@ -42,9 +42,14 @@ function hasTagAttributes ( node, tag, attributes ) {
     	//<CUSTOMIZED>
         // Internet explorer seems to put a semicolon at the end of a style attribute,
         // even if we use setAttribute and the attribute contains no semicolon at all...
-        var nodeAttr = node.getAttribute(attr).replace(/[;]$/, ''),
-        queryAttr = attributes[attr].replace(/[;]$/, '');
-
+        var nodeAttr = node.getAttribute(attr),
+        	queryAttr = attributes[attr];
+        if(nodeAttr){
+        	nodeAttr = nodeAttr.replace(/[;]$/, '');
+        }
+        if (queryAttr){
+        	queryAttr = queryAttr.replace(/[;]$/, '');
+        }
         if ( nodeAttr !== queryAttr ) {
             return false;
         }
@@ -80,19 +85,18 @@ function isContainer ( node ) {
         !isInline( node ) && !isBlock( node );
 }
 
-function getBlockWalker ( node ) {
-    var doc = node.ownerDocument,
-        walker = new TreeWalker(
-            doc.body, SHOW_ELEMENT, isBlock, false );
+function getBlockWalker ( node, self ) {
+    var walker = new TreeWalker(
+            self._body, SHOW_ELEMENT, isBlock, false );
     walker.currentNode = node;
     return walker;
 }
 
-function getPreviousBlock ( node ) {
-    return getBlockWalker( node ).previousNode();
+function getPreviousBlock ( node, self ) {
+    return getBlockWalker( node, self ).previousNode();
 }
-function getNextBlock ( node ) {
-    return getBlockWalker( node ).nextNode();
+function getNextBlock ( node, self ) {
+    return getBlockWalker( node, self ).nextNode();
 }
 
 proto.getNearest = function (node, tag, attributes ){

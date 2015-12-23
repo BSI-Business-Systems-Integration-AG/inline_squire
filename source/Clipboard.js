@@ -108,7 +108,7 @@ var onPaste = function ( event ) {
         startOffset = range.startOffset,
         endContainer = range.endContainer,
         endOffset = range.endOffset,
-        startBlock = getStartBlockOfRange( range );
+        startBlock = getStartBlockOfRange( range, this );
 
     // We need to position the pasteArea in the visible portion of the screen
     // to stop the browser auto-scrolling.

@@ -180,7 +180,7 @@ var leafNodeNames = {
     INPUT: 1
 },
 proto = Squire.prototype;
-//if nodes are the same, will return false
+//if nodes are the same, will return false, unless inclusive is set to true
 function isChildOf(parent, child, inclusive) {
 	inclusive = !!inclusive;
 	var n = inclusive ? child : child.parentNode;
@@ -214,9 +214,14 @@ function hasTagAttributes ( node, tag, attributes ) {
     	//<CUSTOMIZED>
         // Internet explorer seems to put a semicolon at the end of a style attribute,
         // even if we use setAttribute and the attribute contains no semicolon at all...
-        var nodeAttr = node.getAttribute(attr).replace(/[;]$/, ''),
-        queryAttr = attributes[attr].replace(/[;]$/, '');
-
+        var nodeAttr = node.getAttribute(attr),
+        	queryAttr = attributes[attr];
+        if(nodeAttr){
+        	nodeAttr = nodeAttr.replace(/[;]$/, '');
+        }
+        if (queryAttr){
+        	queryAttr = queryAttr.replace(/[;]$/, '');
+        }
         if ( nodeAttr !== queryAttr ) {
             return false;
         }
@@ -252,19 +257,18 @@ function isContainer ( node ) {
         !isInline( node ) && !isBlock( node );
 }
 
-function getBlockWalker ( node ) {
-    var doc = node.ownerDocument,
-        walker = new TreeWalker(
-            doc.body, SHOW_ELEMENT, isBlock, false );
+function getBlockWalker ( node, self ) {
+    var walker = new TreeWalker(
+            self._body, SHOW_ELEMENT, isBlock, false );
     walker.currentNode = node;
     return walker;
 }
 
-function getPreviousBlock ( node ) {
-    return getBlockWalker( node ).previousNode();
+function getPreviousBlock ( node, self ) {
+    return getBlockWalker( node, self ).previousNode();
 }
-function getNextBlock ( node ) {
-    return getBlockWalker( node ).nextNode();
+function getNextBlock ( node, self ) {
+    return getBlockWalker( node, self ).nextNode();
 }
 
 proto.getNearest = function (node, tag, attributes ){
@@ -815,8 +819,8 @@ proto.deleteContentsOfRange = function ( range ) {
 
     // If we split into two different blocks, merge the blocks.
     if ( needsMerge ) {
-        startBlock = getStartBlockOfRange( range );
-        endBlock = getEndBlockOfRange( range );
+        startBlock = getStartBlockOfRange( range, this );
+        endBlock = getEndBlockOfRange( range, this );
         if ( startBlock && endBlock && startBlock !== endBlock ) {
             mergeWithBlock( startBlock, endBlock, range );
         }
@@ -906,7 +910,7 @@ proto.insertTreeFragmentIntoRange = function ( range, frag, body ) {
 
         // 3. Fix cursor then insert block(s) in the fragment
         node = frag;
-        while ( node = getNextBlock( node ) ) {
+        while ( node = getNextBlock( node, this ) ) {
             this.fixCursor( node );
         }
         parent.insertBefore( frag, nodeAfterSplit );
@@ -914,7 +918,7 @@ proto.insertTreeFragmentIntoRange = function ( range, frag, body ) {
         // 4. Remove empty nodes created either side of split, then
         // merge containers at the edges.
         next = nodeBeforeSplit.nextSibling;
-        node = getPreviousBlock( next );
+        node = getPreviousBlock( next, this );
         if ( !/\S/.test( node.textContent ) ) {
             do {
                 parent = node.parentNode;
@@ -938,7 +942,7 @@ proto.insertTreeFragmentIntoRange = function ( range, frag, body ) {
 
         prev = nodeAfterSplit.previousSibling;
         node = isBlock( nodeAfterSplit ) ?
-            nodeAfterSplit : getNextBlock( nodeAfterSplit );
+            nodeAfterSplit : getNextBlock( nodeAfterSplit, this );
         if ( !/\S/.test( node.textContent ) ) {
             do {
                 parent = node.parentNode;
@@ -1068,18 +1072,19 @@ var moveRangeBoundariesUpTree = function ( range, common ) {
 
 // Returns the first block at least partially contained by the range,
 // or null if no block is contained by the range.
-var getStartBlockOfRange = function ( range ) {
+//FIXME: self
+var getStartBlockOfRange = function ( range, self ) {
     var container = range.startContainer,
         block;
 
     // If inline, get the containing block.
     if ( isInline( container ) ) {
-        block = getPreviousBlock( container );
+        block = getPreviousBlock( container, self );
     } else if ( isBlock( container ) ) {
         block = container;
     } else {
         block = getNodeBefore( container, range.startOffset );
-        block = getNextBlock( block );
+        block = getNextBlock( block, self );
     }
     // Check the block actually intersects the range
     return block && isNodeContainedInRange( range, block, true ) ? block : null;
@@ -1087,13 +1092,14 @@ var getStartBlockOfRange = function ( range ) {
 
 // Returns the last block at least partially contained by the range,
 // or null if no block is contained by the range.
-var getEndBlockOfRange = function ( range ) {
+//FIXME: self
+var getEndBlockOfRange = function ( range, self ) {
     var container = range.endContainer,
         block, child;
 
     // If inline, get the containing block.
     if ( isInline( container ) ) {
-        block = getPreviousBlock( container );
+        block = getPreviousBlock( container, self );
     } else if ( isBlock( container ) ) {
         block = container;
     } else {
@@ -1104,7 +1110,7 @@ var getEndBlockOfRange = function ( range ) {
                 block = child;
             }
         }
-        block = getPreviousBlock( block );
+        block = getPreviousBlock( block, self );
 
     }
     // Check the block actually intersects the range
@@ -1119,8 +1125,8 @@ var contentWalker = new TreeWalker( null,
             node.nodeName === 'IMG';
     }
 );
-
-var rangeDoesStartAtBlockBoundary = function ( range ) {
+//FIXME: self
+var rangeDoesStartAtBlockBoundary = function ( range, self ) {
     var startContainer = range.startContainer,
         startOffset = range.startOffset;
 
@@ -1136,12 +1142,12 @@ var rangeDoesStartAtBlockBoundary = function ( range ) {
     }
 
     // Otherwise, look for any previous content in the same block.
-    contentWalker.root = getStartBlockOfRange( range );
+    contentWalker.root = getStartBlockOfRange( range, self );
 
     return !contentWalker.previousNode();
 };
-
-var rangeDoesEndAtBlockBoundary = function ( range ) {
+//FIXME: self
+var rangeDoesEndAtBlockBoundary = function ( range, self ) {
     var endContainer = range.endContainer,
         endOffset = range.endOffset,
         length;
@@ -1160,14 +1166,15 @@ var rangeDoesEndAtBlockBoundary = function ( range ) {
     }
 
     // Otherwise, look for any further content in the same block.
-    contentWalker.root = getEndBlockOfRange( range );
+    contentWalker.root = getEndBlockOfRange( range, self );
 
     return !contentWalker.nextNode();
 };
 
-var expandRangeToBlockBoundaries = function ( range ) {
-    var start = getStartBlockOfRange( range ),
-        end = getEndBlockOfRange( range ),
+//FIXME: self
+var expandRangeToBlockBoundaries = function ( range, self ) {
+    var start = getStartBlockOfRange( range, self ),
+        end = getEndBlockOfRange( range, self ),
         parent;
 
     if ( start && end ) {
@@ -1299,7 +1306,7 @@ var afterDelete = function ( self, range ) {
             parent.removeChild( node );
             // Fix cursor in block
             if ( !isBlock( parent ) ) {
-                parent = getPreviousBlock( parent );
+                parent = getPreviousBlock( parent, self );
             }
             self.fixCursor( parent );
             // Move cursor into text node
@@ -1342,7 +1349,7 @@ var keyHandlers = {
             self.deleteContentsOfRange( range );
         }
 
-        block = getStartBlockOfRange( range );
+        block = getStartBlockOfRange( range, self );
 
         // If this is a malformed bit of document or in a table;
         // just play it safe and insert a <br>.
@@ -1432,13 +1439,13 @@ var keyHandlers = {
             afterDelete( self, range );
         }
         // If at beginning of block, merge with previous
-        else if ( rangeDoesStartAtBlockBoundary( range ) ) {
+        else if ( rangeDoesStartAtBlockBoundary( range, self ) ) {
             event.preventDefault();
-            var current = getStartBlockOfRange( range ),
-                previous = current && getPreviousBlock( current );
+            var current = getStartBlockOfRange( range, self ),
+                previous = current && getPreviousBlock( current, self );
             // Must not be at the very beginning of the text area.
             // Also, must be within editor div.
-            if ( previous && isChildOf(self._body, previous, true)) {
+            if ( previous && isChildOf(self._body, previous)) {
                 // If not editable, just delete whole block.
                 if ( !previous.isContentEditable ) {
                     detach( previous );
@@ -1492,10 +1499,10 @@ var keyHandlers = {
             afterDelete( self, range );
         }
         // If at end of block, merge next into this block
-        else if ( rangeDoesEndAtBlockBoundary( range ) ) {
+        else if ( rangeDoesEndAtBlockBoundary( range, self ) ) {
             event.preventDefault();
-            var current = getStartBlockOfRange( range ),
-                next = current && getNextBlock( current );
+            var current = getStartBlockOfRange( range, self ),
+                next = current && getNextBlock( current, self );
             // Must not be at the very end of the text area.
             // also, next must not be outside of our editor div.
             if ( next && isChildOf(self._body, next, true)) {
@@ -1548,8 +1555,8 @@ var keyHandlers = {
         var node, parent;
         self._removeZWS();
         // If no selection and at start of block
-        if ( range.collapsed && rangeDoesStartAtBlockBoundary( range ) ) {
-            node = getStartBlockOfRange( range );
+        if ( range.collapsed && rangeDoesStartAtBlockBoundary( range, self ) ) {
+            node = getStartBlockOfRange( range, self );
             // Iterate through the block's parents
             while ( parent = node.parentNode ) {
                 // If we find a UL or OL (so are in a list, node must be an LI)
@@ -1569,7 +1576,7 @@ var keyHandlers = {
     'shift-tab': function ( self, event, range ) {
         self._removeZWS();
         // If no selection and at start of block
-        if ( range.collapsed && rangeDoesStartAtBlockBoundary( range ) ) {
+        if ( range.collapsed && rangeDoesStartAtBlockBoundary( range, self ) ) {
             // Break list
             var node = range.startContainer;
             if ( self.getNearest( node, 'UL' ) || self.getNearest( node, 'OL' ) ) {
@@ -1645,22 +1652,12 @@ keyHandlers[ ctrlKey + 'y' ] = mapKeyTo( 'redo' );
 keyHandlers[ ctrlKey + 'z' ] = mapKeyTo( 'undo' );
 keyHandlers[ ctrlKey + 'shift-z' ] = mapKeyTo( 'redo' );
 
-var fontSizes = {
-    1: 10,
-    2: 13,
-    3: 16,
-    4: 18,
-    5: 24,
-    6: 32,
-    7: 48
-};
-
 var spanToSemantic = {
     backgroundColor: {
         regexp: notWS,
         replace: function ( doc, colour ) {
             return createElement( doc, 'SPAN', {
-                'class': 'highlight',
+                'class': 'rte-highlight',
                 style: 'background-color:' + colour
             });
         }
@@ -1669,38 +1666,8 @@ var spanToSemantic = {
         regexp: notWS,
         replace: function ( doc, colour ) {
             return createElement( doc, 'SPAN', {
-                'class': 'colour',
+                'class': 'rte-colour',
                 style: 'color:' + colour
-            });
-        }
-    },
-    fontWeight: {
-        regexp: /^bold/i,
-        replace: function ( doc ) {
-            return createElement( doc, 'B' );
-        }
-    },
-    fontStyle: {
-        regexp: /^italic/i,
-        replace: function ( doc ) {
-            return createElement( doc, 'I' );
-        }
-    },
-    fontFamily: {
-        regexp: notWS,
-        replace: function ( doc, family ) {
-            return createElement( doc, 'SPAN', {
-                'class': 'font',
-                style: 'font-family:' + family
-            });
-        }
-    },
-    fontSize: {
-        regexp: notWS,
-        replace: function ( doc, size ) {
-            return createElement( doc, 'SPAN', {
-                'class': 'size',
-                style: 'font-size:' + size
             });
         }
     }
@@ -1747,39 +1714,16 @@ var stylesRewriters = {
     EM: replaceWithTag( 'I' ),
     STRIKE: replaceWithTag( 'S' ),
     FONT: function ( node, parent ) {
-        var face = node.face,
-            size = node.size,
-            colour = node.color,
+        var colour = node.color,
             doc = node.ownerDocument,
-            fontSpan, sizeSpan, colourSpan,
+            colourSpan,
             newTreeBottom, newTreeTop;
-        if ( face ) {
-            fontSpan = createElement( doc, 'SPAN', {
-                'class': 'font',
-                style: 'font-family:' + face
-            });
-            newTreeTop = fontSpan;
-            newTreeBottom = fontSpan;
-        }
-        if ( size ) {
-            sizeSpan = createElement( doc, 'SPAN', {
-                'class': 'size',
-                style: 'font-size:' + fontSizes[ size ] + 'px'
-            });
-            if ( !newTreeTop ) {
-                newTreeTop = sizeSpan;
-            }
-            if ( newTreeBottom ) {
-                newTreeBottom.appendChild( sizeSpan );
-            }
-            newTreeBottom = sizeSpan;
-        }
         if ( colour && /^#?([\dA-F]{3}){1,2}$/i.test( colour ) ) {
             if ( colour.charAt( 0 ) !== '#' ) {
                 colour = '#' + colour;
             }
             colourSpan = createElement( doc, 'SPAN', {
-                'class': 'colour',
+                'class': 'rte-colour',
                 style: 'color:' + colour
             });
             if ( !newTreeTop ) {
@@ -1796,15 +1740,6 @@ var stylesRewriters = {
         parent.replaceChild( newTreeTop, node );
         newTreeBottom.appendChild( empty( node ) );
         return newTreeBottom;
-    },
-    TT: function ( node, parent ) {
-        var el = createElement( node.ownerDocument, 'SPAN', {
-            'class': 'font',
-            style: 'font-family:menlo,consolas,"courier new",monospace'
-        });
-        parent.replaceChild( el, node );
-        el.appendChild( empty( node ) );
-        return el;
     }
 };
 
@@ -2098,7 +2033,7 @@ var onPaste = function ( event ) {
         startOffset = range.startOffset,
         endContainer = range.endContainer,
         endOffset = range.endOffset,
-        startBlock = getStartBlockOfRange( range );
+        startBlock = getStartBlockOfRange( range, this );
 
     // We need to position the pasteArea in the visible portion of the screen
     // to stop the browser auto-scrolling.
@@ -2603,18 +2538,32 @@ proto.getSelection = function () {
             selection.setEndBefore( endContainer );
         }
         //ensure selection within range...
-
+        //TODO [RTE] fko: how to ensure selection is always ok?
         if( this._isSelectionWithinEditor(selection) ){
         	this._lastSelection = selection;
     	}
         else{
-        	selection = this._lastSelection;
+        	if(this._lastSelection && this._isSelectionWithinEditor(this._lastSelection)){
+        		selection = this._lastSelection;
+        	}
+        	else{
+        		selection = null; //will be fixed below.
+        	}
         }
-    } else {
+    } else  if ( this._isSelectionWithinEditor(this._lastSelection)){
         selection = this._lastSelection;
     }
     if ( !selection ) {
+    	if( !this._body.childNodes || this._body.childNodes.length === 0){
+    		this.fixCursor(this._body);
+    	}
         selection = this._createRange( this._body.firstChild, 0 );
+    }
+    else if( selection.collapsed && selection.startContainer === this._body && selection.endContainer === this._body){
+		if(! this._body.childNodes || this._body.childNodes.length === 0){
+    		this.fixCursor(this._body);
+    	}
+		selection = this._createRange( this._body.firstChild, 0 );
     }
     return selection;
 };
@@ -3303,7 +3252,10 @@ var tagAfterSplit = {
 var splitBlock = function ( self, block, node, offset ) {
     var splitTag = tagAfterSplit[ block.nodeName ],
         splitProperties = null,
-        nodeAfterSplit = self.split( node, offset, block.parentNode ),
+        //<CUSTOMIZED>
+        stopNode = isChildOf(self._body, block) ? block.parentNode : self._body,
+        //</CUSTOMIZED>
+        nodeAfterSplit = self.split( node, offset, stopNode ),
         config = self._config;
 
     if ( !splitTag ) {
@@ -3336,12 +3288,12 @@ proto.forEachBlock = function ( fn, mutates, range ) {
         this._getRangeAndRemoveBookmark( range );
     }
 
-    var start = getStartBlockOfRange( range ),
-        end = getEndBlockOfRange( range );
+    var start = getStartBlockOfRange( range, this ),
+        end = getEndBlockOfRange( range, this );
     if ( start && end ) {
         do {
             if ( fn( start ) || start === end ) { break; }
-        } while ( start = getNextBlock( start ) );
+        } while ( start = getNextBlock( start, this ) );
     }
 
     if ( mutates ) {
@@ -3371,7 +3323,7 @@ proto.modifyBlocks = function ( modify, range ) {
     }
 
     // 2. Expand range to block boundaries
-    expandRangeToBlockBoundaries( range );
+    expandRangeToBlockBoundaries( range, this );
 
     // 3. Remove range.
     var body = this._body,
@@ -3432,7 +3384,7 @@ var removeBlockQuote = function (/* frag */) {
 };
 
 var makeList = function ( self, frag, type ) {
-    var walker = getBlockWalker( frag ),
+    var walker = getBlockWalker( frag, self ),
         node, tag, prev, newLi,
         tagAttributes = self._config.tagAttributes,
         listAttrs = tagAttributes[ type.toLowerCase() ],
@@ -3591,7 +3543,7 @@ proto._setHTML = function ( html ) {
     node.innerHTML = html;
     do {
         this.fixCursor( node );
-    } while ( node = getNextBlock( node ) );
+    } while ( node = getNextBlock( node, this ) );
     this._ignoreChange = true;
 };
 
@@ -3603,7 +3555,7 @@ proto.getHTML = function ( withBookMark ) {
     }
     if ( useTextFixer ) {
         node = this._body;
-        while ( node = getNextBlock( node ) ) {
+        while ( node = getNextBlock( node, this ) ) {
             if ( !node.textContent && !node.querySelector( 'BR' ) ) {
                 fixer = this.createElement( 'BR' );
                 node.appendChild( fixer );
@@ -3640,7 +3592,7 @@ proto.setHTML = function ( html ) {
 
     // Fix cursor
     var node = frag;
-    while ( node = getNextBlock( node ) ) {
+    while ( node = getNextBlock( node, this ) ) {
         this.fixCursor( node );
     }
 
@@ -3691,7 +3643,7 @@ proto.insertElement = function ( el, range ) {
     } else {
         // Get containing block node.
         var body = this._body,
-            splitNode = getStartBlockOfRange( range ) || body,
+            splitNode = getStartBlockOfRange( range, this ) || body,
             parent, nodeAfterSplit;
         // While at end of container node, move up DOM tree.
         while ( splitNode !== body && !splitNode.nextSibling ) {
@@ -3793,7 +3745,7 @@ proto.insertHTML = function ( html, isPaste ) {
         removeEmptyInlines( frag );
         frag.normalize();
 
-        while ( node = getNextBlock( node ) ) {
+        while ( node = getNextBlock( node, this ) ) {
             this.fixCursor( node );
         }
 
@@ -3936,12 +3888,12 @@ proto.setTextColour = function ( colour ) {
     this.changeFormat({
         tag: 'SPAN',
         attributes: {
-            'class': 'colour',
+            'class': 'rte-colour',
             style: 'color:' + colour
         }
     }, {
         tag: 'SPAN',
-        attributes: { 'class': 'colour' }
+        attributes: { 'class': 'rte-colour' }
     });
     return this.focus();
 };
@@ -3951,7 +3903,7 @@ proto.removeTextColour = function () {
   this.changeFormat(null,
   {
       tag: 'SPAN',
-      attributes: { 'class': 'colour' }
+      attributes: { 'class': 'rte-colour' }
   });
   return this.focus();
 };
@@ -3961,12 +3913,12 @@ proto.setHighlightColour = function ( colour ) {
     this.changeFormat({
         tag: 'SPAN',
         attributes: {
-            'class': 'highlight',
+            'class': 'rte-highlight',
             style: 'background-color:' + colour
         }
     }, {
         tag: 'SPAN',
-        attributes: { 'class': 'highlight' }
+        attributes: { 'class': 'rte-highlight' }
     });
     return this.focus();
 };
@@ -3976,7 +3928,7 @@ proto.removeHighlightColour = function () {
   this.changeFormat(null,
     {
         tag: 'SPAN',
-        attributes: { 'class': 'highlight' }
+        attributes: { 'class': 'rte-highlight' }
     });
   return this.focus();
 };
@@ -4033,7 +3985,7 @@ proto.removeAllFormatting = function ( range ) {
         stopNode = stopNode.parentNode;
     }
     if ( !stopNode ) {
-        expandRangeToBlockBoundaries( range );
+        expandRangeToBlockBoundaries( range, this );
         stopNode = this._body;
     }
     if(! isChildOf(this._body, stopNode)){

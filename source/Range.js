@@ -154,8 +154,8 @@ proto.deleteContentsOfRange = function ( range ) {
 
     // If we split into two different blocks, merge the blocks.
     if ( needsMerge ) {
-        startBlock = getStartBlockOfRange( range );
-        endBlock = getEndBlockOfRange( range );
+        startBlock = getStartBlockOfRange( range, this );
+        endBlock = getEndBlockOfRange( range, this );
         if ( startBlock && endBlock && startBlock !== endBlock ) {
             mergeWithBlock( startBlock, endBlock, range );
         }
@@ -245,7 +245,7 @@ proto.insertTreeFragmentIntoRange = function ( range, frag, body ) {
 
         // 3. Fix cursor then insert block(s) in the fragment
         node = frag;
-        while ( node = getNextBlock( node ) ) {
+        while ( node = getNextBlock( node, this ) ) {
             this.fixCursor( node );
         }
         parent.insertBefore( frag, nodeAfterSplit );
@@ -253,7 +253,7 @@ proto.insertTreeFragmentIntoRange = function ( range, frag, body ) {
         // 4. Remove empty nodes created either side of split, then
         // merge containers at the edges.
         next = nodeBeforeSplit.nextSibling;
-        node = getPreviousBlock( next );
+        node = getPreviousBlock( next, this );
         if ( !/\S/.test( node.textContent ) ) {
             do {
                 parent = node.parentNode;
@@ -277,7 +277,7 @@ proto.insertTreeFragmentIntoRange = function ( range, frag, body ) {
 
         prev = nodeAfterSplit.previousSibling;
         node = isBlock( nodeAfterSplit ) ?
-            nodeAfterSplit : getNextBlock( nodeAfterSplit );
+            nodeAfterSplit : getNextBlock( nodeAfterSplit, this );
         if ( !/\S/.test( node.textContent ) ) {
             do {
                 parent = node.parentNode;
@@ -407,18 +407,19 @@ var moveRangeBoundariesUpTree = function ( range, common ) {
 
 // Returns the first block at least partially contained by the range,
 // or null if no block is contained by the range.
-var getStartBlockOfRange = function ( range ) {
+//FIXME: self
+var getStartBlockOfRange = function ( range, self ) {
     var container = range.startContainer,
         block;
 
     // If inline, get the containing block.
     if ( isInline( container ) ) {
-        block = getPreviousBlock( container );
+        block = getPreviousBlock( container, self );
     } else if ( isBlock( container ) ) {
         block = container;
     } else {
         block = getNodeBefore( container, range.startOffset );
-        block = getNextBlock( block );
+        block = getNextBlock( block, self );
     }
     // Check the block actually intersects the range
     return block && isNodeContainedInRange( range, block, true ) ? block : null;
@@ -426,13 +427,14 @@ var getStartBlockOfRange = function ( range ) {
 
 // Returns the last block at least partially contained by the range,
 // or null if no block is contained by the range.
-var getEndBlockOfRange = function ( range ) {
+//FIXME: self
+var getEndBlockOfRange = function ( range, self ) {
     var container = range.endContainer,
         block, child;
 
     // If inline, get the containing block.
     if ( isInline( container ) ) {
-        block = getPreviousBlock( container );
+        block = getPreviousBlock( container, self );
     } else if ( isBlock( container ) ) {
         block = container;
     } else {
@@ -443,7 +445,7 @@ var getEndBlockOfRange = function ( range ) {
                 block = child;
             }
         }
-        block = getPreviousBlock( block );
+        block = getPreviousBlock( block, self );
 
     }
     // Check the block actually intersects the range
@@ -458,8 +460,8 @@ var contentWalker = new TreeWalker( null,
             node.nodeName === 'IMG';
     }
 );
-
-var rangeDoesStartAtBlockBoundary = function ( range ) {
+//FIXME: self
+var rangeDoesStartAtBlockBoundary = function ( range, self ) {
     var startContainer = range.startContainer,
         startOffset = range.startOffset;
 
@@ -475,12 +477,12 @@ var rangeDoesStartAtBlockBoundary = function ( range ) {
     }
 
     // Otherwise, look for any previous content in the same block.
-    contentWalker.root = getStartBlockOfRange( range );
+    contentWalker.root = getStartBlockOfRange( range, self );
 
     return !contentWalker.previousNode();
 };
-
-var rangeDoesEndAtBlockBoundary = function ( range ) {
+//FIXME: self
+var rangeDoesEndAtBlockBoundary = function ( range, self ) {
     var endContainer = range.endContainer,
         endOffset = range.endOffset,
         length;
@@ -499,14 +501,15 @@ var rangeDoesEndAtBlockBoundary = function ( range ) {
     }
 
     // Otherwise, look for any further content in the same block.
-    contentWalker.root = getEndBlockOfRange( range );
+    contentWalker.root = getEndBlockOfRange( range, self );
 
     return !contentWalker.nextNode();
 };
 
-var expandRangeToBlockBoundaries = function ( range ) {
-    var start = getStartBlockOfRange( range ),
-        end = getEndBlockOfRange( range ),
+//FIXME: self
+var expandRangeToBlockBoundaries = function ( range, self ) {
+    var start = getStartBlockOfRange( range, self ),
+        end = getEndBlockOfRange( range, self ),
         parent;
 
     if ( start && end ) {

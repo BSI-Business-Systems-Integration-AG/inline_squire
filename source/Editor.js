@@ -450,18 +450,32 @@ proto.getSelection = function () {
             selection.setEndBefore( endContainer );
         }
         //ensure selection within range...
-
+        //TODO [RTE] fko: how to ensure selection is always ok?
         if( this._isSelectionWithinEditor(selection) ){
         	this._lastSelection = selection;
     	}
         else{
-        	selection = this._lastSelection;
+        	if(this._lastSelection && this._isSelectionWithinEditor(this._lastSelection)){
+        		selection = this._lastSelection;
+        	}
+        	else{
+        		selection = null; //will be fixed below.
+        	}
         }
-    } else {
+    } else  if ( this._isSelectionWithinEditor(this._lastSelection)){
         selection = this._lastSelection;
     }
     if ( !selection ) {
+    	if( !this._body.childNodes || this._body.childNodes.length === 0){
+    		this.fixCursor(this._body);
+    	}
         selection = this._createRange( this._body.firstChild, 0 );
+    }
+    else if( selection.collapsed && selection.startContainer === this._body && selection.endContainer === this._body){
+		if(! this._body.childNodes || this._body.childNodes.length === 0){
+    		this.fixCursor(this._body);
+    	}
+		selection = this._createRange( this._body.firstChild, 0 );
     }
     return selection;
 };
@@ -1150,7 +1164,10 @@ var tagAfterSplit = {
 var splitBlock = function ( self, block, node, offset ) {
     var splitTag = tagAfterSplit[ block.nodeName ],
         splitProperties = null,
-        nodeAfterSplit = self.split( node, offset, block.parentNode ),
+        //<CUSTOMIZED>
+        stopNode = isChildOf(self._body, block) ? block.parentNode : self._body,
+        //</CUSTOMIZED>
+        nodeAfterSplit = self.split( node, offset, stopNode ),
         config = self._config;
 
     if ( !splitTag ) {
@@ -1183,12 +1200,12 @@ proto.forEachBlock = function ( fn, mutates, range ) {
         this._getRangeAndRemoveBookmark( range );
     }
 
-    var start = getStartBlockOfRange( range ),
-        end = getEndBlockOfRange( range );
+    var start = getStartBlockOfRange( range, this ),
+        end = getEndBlockOfRange( range, this );
     if ( start && end ) {
         do {
             if ( fn( start ) || start === end ) { break; }
-        } while ( start = getNextBlock( start ) );
+        } while ( start = getNextBlock( start, this ) );
     }
 
     if ( mutates ) {
@@ -1218,7 +1235,7 @@ proto.modifyBlocks = function ( modify, range ) {
     }
 
     // 2. Expand range to block boundaries
-    expandRangeToBlockBoundaries( range );
+    expandRangeToBlockBoundaries( range, this );
 
     // 3. Remove range.
     var body = this._body,
@@ -1279,7 +1296,7 @@ var removeBlockQuote = function (/* frag */) {
 };
 
 var makeList = function ( self, frag, type ) {
-    var walker = getBlockWalker( frag ),
+    var walker = getBlockWalker( frag, self ),
         node, tag, prev, newLi,
         tagAttributes = self._config.tagAttributes,
         listAttrs = tagAttributes[ type.toLowerCase() ],
@@ -1438,7 +1455,7 @@ proto._setHTML = function ( html ) {
     node.innerHTML = html;
     do {
         this.fixCursor( node );
-    } while ( node = getNextBlock( node ) );
+    } while ( node = getNextBlock( node, this ) );
     this._ignoreChange = true;
 };
 
@@ -1450,7 +1467,7 @@ proto.getHTML = function ( withBookMark ) {
     }
     if ( useTextFixer ) {
         node = this._body;
-        while ( node = getNextBlock( node ) ) {
+        while ( node = getNextBlock( node, this ) ) {
             if ( !node.textContent && !node.querySelector( 'BR' ) ) {
                 fixer = this.createElement( 'BR' );
                 node.appendChild( fixer );
@@ -1487,7 +1504,7 @@ proto.setHTML = function ( html ) {
 
     // Fix cursor
     var node = frag;
-    while ( node = getNextBlock( node ) ) {
+    while ( node = getNextBlock( node, this ) ) {
         this.fixCursor( node );
     }
 
@@ -1538,7 +1555,7 @@ proto.insertElement = function ( el, range ) {
     } else {
         // Get containing block node.
         var body = this._body,
-            splitNode = getStartBlockOfRange( range ) || body,
+            splitNode = getStartBlockOfRange( range, this ) || body,
             parent, nodeAfterSplit;
         // While at end of container node, move up DOM tree.
         while ( splitNode !== body && !splitNode.nextSibling ) {
@@ -1640,7 +1657,7 @@ proto.insertHTML = function ( html, isPaste ) {
         removeEmptyInlines( frag );
         frag.normalize();
 
-        while ( node = getNextBlock( node ) ) {
+        while ( node = getNextBlock( node, this ) ) {
             this.fixCursor( node );
         }
 
@@ -1783,12 +1800,12 @@ proto.setTextColour = function ( colour ) {
     this.changeFormat({
         tag: 'SPAN',
         attributes: {
-            'class': 'colour',
+            'class': 'rte-colour',
             style: 'color:' + colour
         }
     }, {
         tag: 'SPAN',
-        attributes: { 'class': 'colour' }
+        attributes: { 'class': 'rte-colour' }
     });
     return this.focus();
 };
@@ -1798,7 +1815,7 @@ proto.removeTextColour = function () {
   this.changeFormat(null,
   {
       tag: 'SPAN',
-      attributes: { 'class': 'colour' }
+      attributes: { 'class': 'rte-colour' }
   });
   return this.focus();
 };
@@ -1808,12 +1825,12 @@ proto.setHighlightColour = function ( colour ) {
     this.changeFormat({
         tag: 'SPAN',
         attributes: {
-            'class': 'highlight',
+            'class': 'rte-highlight',
             style: 'background-color:' + colour
         }
     }, {
         tag: 'SPAN',
-        attributes: { 'class': 'highlight' }
+        attributes: { 'class': 'rte-highlight' }
     });
     return this.focus();
 };
@@ -1823,7 +1840,7 @@ proto.removeHighlightColour = function () {
   this.changeFormat(null,
     {
         tag: 'SPAN',
-        attributes: { 'class': 'highlight' }
+        attributes: { 'class': 'rte-highlight' }
     });
   return this.focus();
 };
@@ -1880,7 +1897,7 @@ proto.removeAllFormatting = function ( range ) {
         stopNode = stopNode.parentNode;
     }
     if ( !stopNode ) {
-        expandRangeToBlockBoundaries( range );
+        expandRangeToBlockBoundaries( range, this );
         stopNode = this._body;
     }
     if(! isChildOf(this._body, stopNode)){

@@ -1,5 +1,15 @@
 /*jshint strict:false, undef:false, unused:false */
 
+var fontSizes = {
+    1: 10,
+    2: 13,
+    3: 16,
+    4: 18,
+    5: 24,
+    6: 32,
+    7: 48
+};
+
 var spanToSemantic = {
     backgroundColor: {
         regexp: notWS,
@@ -18,7 +28,37 @@ var spanToSemantic = {
                 style: 'color:' + colour
             });
         }
-    }
+    } /*
+    fontWeight: {
+        regexp: /^bold/i,
+        replace: function ( doc ) {
+            return createElement( doc, 'B' );
+        }
+    },
+    fontStyle: {
+        regexp: /^italic/i,
+        replace: function ( doc ) {
+            return createElement( doc, 'I' );
+        }
+    },
+    fontFamily: {
+        regexp: notWS,
+        replace: function ( doc, family ) {
+            return createElement( doc, 'SPAN', {
+                'class': 'font',
+                style: 'font-family:' + family
+            });
+        }
+    },
+    fontSize: {
+        regexp: notWS,
+        replace: function ( doc, size ) {
+            return createElement( doc, 'SPAN', {
+                'class': 'size',
+                style: 'font-size:' + size
+            });
+        }
+    } */
 };
 
 var replaceWithTag = function ( tag ) {
@@ -28,6 +68,86 @@ var replaceWithTag = function ( tag ) {
         el.appendChild( empty( node ) );
         return el;
     };
+};
+
+var attributeFilters = {
+
+	style: function (elementName, element ) {
+			var allowed = allowedStyles[elementName],
+			removeStyle = [],
+			style = element.style;
+			if(! allowed || !style || style.length === 0){
+				element.removeAttribute('style');
+				return;
+			}
+			for(var s=0; s<style.length; s++){
+				if(allowed.indexOf(style[s]) === -1){
+					removeStyle.push(style[s]);
+				}
+			}
+			for(var x=0; x<removeStyle.length; x++){
+				style.removeProperty(removeStyle[x]);
+			}
+
+			if(style.length === 0){
+				element.removeAttribute('style');
+			}
+	},
+	'class': function (elementName, element) {
+			var allowed = allowedClasses[elementName],
+			required = requiredClasses[elementName],
+			classesToRemove = [],
+			classList = element.className.split(' ');
+			if(! allowed){
+				element.removeAttribute('class');
+			}
+			else if(classList) {
+				for(var c=0; c<classList.length; c++){
+					if(allowed.indexOf(classList[c]) === -1){
+						classesToRemove.push(classList[c]);
+					}
+				}
+				for(var x=0; x<classesToRemove.length; x++){
+					removeClass(element, classesToRemove[x]);
+				}
+			}
+			if(required){
+				//add required classes, e.g. "OL" for ol tags:
+				classList = element.className.split(' ') || [];
+				for(var r=0; r<required.length; r++){
+					if(classList.indexOf(required[r] === -1)){
+						addClass(element, required[r]);
+					}
+				}
+			}
+
+			if(!element.className){
+				element.removeAttribute('class');
+			}
+	}
+};
+
+var allowedStyles = {
+	SPAN: ['background-color', 'color']
+};
+
+var allowedClasses = {
+    SPAN: ['rte-highlight', 'rte-colour'],
+    LI: ['rte-li'],
+    UL: ['rte-ul'],
+    OL: ['rte-ol']
+};
+
+var requiredClasses = {
+	LI: ['rte-li'],
+    UL: ['rte-ul'],
+    OL: ['rte-ol']
+};
+
+var allowedAttributes = {
+	SPAN: ['style', 'class'],
+	IMG: ['src'],
+	A: ['href']
 };
 
 var stylesRewriters = {
@@ -62,10 +182,33 @@ var stylesRewriters = {
     EM: replaceWithTag( 'I' ),
     STRIKE: replaceWithTag( 'S' ),
     FONT: function ( node, parent ) {
-        var colour = node.color,
+        var face = node.face,
+            size = node.size,
+            colour = node.color,
             doc = node.ownerDocument,
-            colourSpan,
+            fontSpan, sizeSpan, colourSpan,
             newTreeBottom, newTreeTop;
+        if ( face ) {
+            fontSpan = createElement( doc, 'SPAN', {
+                'class': 'font',
+                style: 'font-family:' + face
+            });
+            newTreeTop = fontSpan;
+            newTreeBottom = fontSpan;
+        }
+        if ( size ) {
+            sizeSpan = createElement( doc, 'SPAN', {
+                'class': 'size',
+                style: 'font-size:' + fontSizes[ size ] + 'px'
+            });
+            if ( !newTreeTop ) {
+                newTreeTop = sizeSpan;
+            }
+            if ( newTreeBottom ) {
+                newTreeBottom.appendChild( sizeSpan );
+            }
+            newTreeBottom = sizeSpan;
+        }
         if ( colour && /^#?([\dA-F]{3}){1,2}$/i.test( colour ) ) {
             if ( colour.charAt( 0 ) !== '#' ) {
                 colour = '#' + colour;
@@ -88,10 +231,31 @@ var stylesRewriters = {
         parent.replaceChild( newTreeTop, node );
         newTreeBottom.appendChild( empty( node ) );
         return newTreeBottom;
-    }
+    },
+    TT: function ( node, parent ) {
+        var el = createElement( node.ownerDocument, 'SPAN', {
+            'class': 'font',
+            style: 'font-family:menlo,consolas,"courier new",monospace'
+        });
+        parent.replaceChild( el, node );
+        el.appendChild( empty( node ) );
+        return el;
+    },
+    P: replaceWithTag( 'DIV' ),
+    H1: replaceWithTag( 'DIV'),
+    H2: replaceWithTag( 'DIV'),
+    H3: replaceWithTag( 'DIV'),
+    H4: replaceWithTag( 'DIV'),
+    H5: replaceWithTag( 'DIV'),
+    H6: replaceWithTag( 'DIV')
+
 };
 
-var allowedBlock = /^(?:A(?:DDRESS|RTICLE|SIDE|UDIO)|BLOCKQUOTE|CAPTION|D(?:[DLT]|IV)|F(?:IGURE|IGCAPTION|OOTER)|H[1-6]|HEADER|L(?:ABEL|EGEND|I)|O(?:L|UTPUT)|P(?:RE)?|SECTION|T(?:ABLE|BODY|D|FOOT|H|HEAD|R)|UL)$/;
+var allowedBlock = /^(?:A(?:DDRESS|RTICLE|SIDE|UDIO)|BLOCKQUOTE|CAPTION|D(?:[DLT]|IV)|F(?:IGURE|IGCAPTION|OOTER)|H[1-6]|HEADER|L(?:ABEL|EGEND|I)|O(?:L|UTPUT)|P(?:RE)?|SECTION|T(?:BODY|FOOT|HEAD)|UL)$/;
+
+var blockWhiteList = /^(?:DIV|SPAN|A|UL|OL|LI)$/;
+
+var inlineWhiteList = /^(?:SPAN|A|B|BR|I|S|U|INPUT)$/;
 
 var blacklist = /^(?:HEAD|META|STYLE)/;
 
@@ -131,15 +295,49 @@ var cleanTree = function cleanTree ( node ) {
                 i -= 1;
                 l -= 1;
                 continue;
-            } else if ( !allowedBlock.test( nodeName ) && !isInline( child ) ) {
+            } else if ( !blockWhiteList.test( nodeName ) && !isInline( child ) ) {
                 i -= 1;
                 l += childLength - 1;
                 node.replaceChild( empty( child ), child );
                 continue;
+            } else if ( !inlineWhiteList.test ( nodeName ) && isInline( child ) ) {
+            	i -= 1;
+            	l += childLength -1;
+            	node.replaceChild( empty( child ), child );
+            	continue;
             }
+
+            //Node has been accepted. Take care of attributes
+            var attrsToRemove = [];
+            var attrsToFilter = [];
+            if(child.attributes) {
+	            for(var a=0, attrs = child.attributes; a<attrs.length; a++) {
+	            	if( attributeFilters[attrs[a].nodeName]){
+	            		//taken care of later
+	            		continue;
+	            	}
+	            	else if(allowedAttributes[nodeName]){
+	            		if(allowedAttributes[nodeName].indexOf(attrs[a].nodeName) > -1) {
+	            			continue;
+	            		}
+	            	}
+	            	attrsToRemove.push(attrs[a].nodeName);
+	            }
+
+	            for(var x =0; x<attrsToRemove.length; x++ ) {
+	            	child.removeAttribute(attrsToRemove[x]);
+	            }
+
+            }
+
+            for(var filter in attributeFilters){
+            	attributeFilters[filter](nodeName, child);
+            }
+
             if ( childLength ) {
                 cleanTree( child );
             }
+
         } else {
             if ( nodeType === TEXT_NODE ) {
                 data = child.data;
@@ -199,6 +397,19 @@ var cleanTree = function cleanTree ( node ) {
 };
 
 // ---
+
+function removeClass( element, clazz ) {
+	element.className = element.className.replace( new RegExp('(?:^|\\s)'+clazz+'(?!\\S)') ,'' );
+}
+
+function addClass( element, clazz ){
+	if(element.className){
+		element.className = element.className + ' ' + clazz;
+	}
+	else{
+		element.className = '' + clazz;
+	}
+}
 
 var removeEmptyInlines = function removeEmptyInlines ( root ) {
     var children = root.childNodes,
