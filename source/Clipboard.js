@@ -39,7 +39,12 @@ var onPaste = function ( event ) {
             if ( type === 'text/html' ) {
                 /*jshint loopfunc: true */
                 item.getAsString( function ( html ) {
-                    self.insertHTML( html, true );
+                	// <CUSTOMIZED>
+                	self.fireEvent('requestHtmlPaste', {
+                		rawHtml: html
+                	});
+                    //self.insertHTML( html, true );
+                	// </CUSTOMIZED>
                 });
                 /*jshint loopfunc: false */
                 return;
@@ -90,7 +95,12 @@ var onPaste = function ( event ) {
         // version is the empty string! So always try to get HTML, but if none,
         // insert plain text instead.
         if (( data = clipboardData.getData( 'text/html' ) )) {
-            this.insertHTML( data, true );
+        	// <CUSTOMIZED>
+        	this.fireEvent('requestHtmlPaste', {
+        		rawHtml: data
+        	});
+            //this.insertHTML( data, true );
+        	// </CUSTOMIZED>
         } else if (( data = clipboardData.getData( 'text/plain' ) )) {
             this.insertPlainText( data, true );
         }
@@ -155,7 +165,12 @@ var onPaste = function ( event ) {
             self.setSelection( range );
 
             if ( html ) {
-                self.insertHTML( html, true );
+            	// <CUSTOMIZED>
+            	self.fireEvent('requestHtmlPaste', {
+            		rawHtml: html
+            	});
+                //self.insertHTML( html, true );
+            	// </CUSTOMIZED>
             }
         } catch ( error ) {
             self.didError( error );
