@@ -182,7 +182,7 @@ var cleanTree = function cleanTree ( node ) {
                         }
                     }
                     if ( !sibling ) {
-                        data = data.replace( /^\s+/g, '' );
+                        data = data.replace( /\s+$/g, '' );
                     }
                 }
                 if ( data ) {
