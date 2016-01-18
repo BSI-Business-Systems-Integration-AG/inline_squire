@@ -380,6 +380,9 @@ var keyHandlers = {
                     if ( node.previousSibling ) {
                         // Then increase the list level
                         event.preventDefault();
+                        // <CUSTOMIZED>
+                        event.stopPropagation();
+                        // </<CUSTOMIZED>
                         self.modifyBlocks( increaseListLevel, range );
                     }
                     break;
@@ -396,6 +399,9 @@ var keyHandlers = {
             var node = range.startContainer;
             if ( self.getNearest( node, 'UL' ) || self.getNearest( node, 'OL' ) ) {
                 event.preventDefault();
+                // <CUSTOMIZED>
+                event.stopPropagation();
+                // </<CUSTOMIZED>
                 self.modifyBlocks( decreaseListLevel, range );
             }
         }
