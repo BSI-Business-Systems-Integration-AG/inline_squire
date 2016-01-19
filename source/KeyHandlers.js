@@ -16,6 +16,11 @@ var keys = {
 
 // Ref: http://unixpapa.com/js/key.html
 var onKey = function ( event ) {
+	// <CUSTOMIZED>
+	if (!this.enabled) {
+		return;
+	}
+	// </CUSTOMIZED>
     var code = event.keyCode,
         key = keys[ code ],
         modifiers = '',

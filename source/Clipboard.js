@@ -1,6 +1,12 @@
 /*jshint strict:false, undef:false, unused:false */
 
 var onCut = function () {
+	// <CUSTOMIZED>
+	if (!this.enabled) {
+		return;
+	}
+	// </CUSTOMIZED>
+
     // Save undo checkpoint
     var range = this.getSelection();
     var self = this;
@@ -18,6 +24,12 @@ var onCut = function () {
 };
 
 var onPaste = function ( event ) {
+	// <CUSTOMIZED>
+	if (!this.enabled) {
+		return;
+	}
+	// </CUSTOMIZED>
+
     var clipboardData = event.clipboardData,
         items = clipboardData && clipboardData.items,
         fireDrop = false,

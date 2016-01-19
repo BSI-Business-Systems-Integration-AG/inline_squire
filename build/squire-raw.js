@@ -1201,6 +1201,11 @@ var keys = {
 
 // Ref: http://unixpapa.com/js/key.html
 var onKey = function ( event ) {
+	// <CUSTOMIZED>
+	if (!this.enabled) {
+		return;
+	}
+	// </CUSTOMIZED>
     var code = event.keyCode,
         key = keys[ code ],
         modifiers = '',
@@ -1932,6 +1937,12 @@ proto.cleanupBRs = function ( root ) {
 };
 
 var onCut = function () {
+	// <CUSTOMIZED>
+	if (!this.enabled) {
+		return;
+	}
+	// </CUSTOMIZED>
+
     // Save undo checkpoint
     var range = this.getSelection();
     var self = this;
@@ -1949,6 +1960,12 @@ var onCut = function () {
 };
 
 var onPaste = function ( event ) {
+	// <CUSTOMIZED>
+	if (!this.enabled) {
+		return;
+	}
+	// </CUSTOMIZED>
+
     var clipboardData = event.clipboardData,
         items = clipboardData && clipboardData.items,
         fireDrop = false,
@@ -2155,8 +2172,6 @@ function Squire ( div, doc, config ) {
     this._lastActiveNode = null;
 
     this.enabled = true;  //true by default
-    this._inactiveKeyHandlers = null;
-    this._inactiveEvents = null;
     //</CUSTOMIZED>
 
     this.addEventListener( 'keyup', this._updatePathOnEvent );
@@ -2261,43 +2276,23 @@ proto.setConfig = function ( config ) {
     return this;
 };
 
-
 //<CUSTOMIZED>
 proto.setEnabled = function (enabled) {
-  // backup all key handlers, so that they are not active if field is disabled.
-  // also, make document not editable.
   enabled = !!enabled;
-  if(this.enabled === enabled){
-    //nop
+  if (this.enabled === enabled) {
     return;
   }
-
   this.enabled = enabled;
 
   var body = this._body;
   if(enabled){
-    if(this._inactiveKeyHandlers){
-      this._keyHandlers = this._inactiveKeyHandlers;
-      this._inactiveKeyHandlers = null;
-    }
-    if(this._inactiveEvents){
-      this._events = this._inactiveEvents;
-      this._inactiveEvents = null;
-    }
     body.setAttribute( 'contenteditable', 'true' );
   }
   else {
-//    this.moveCursorToStart();
     body.setAttribute( 'contenteditable', 'false' );
-    this._inactiveKeyHandlers = this._keyHandlers;
-    this._keyHandlers = [];
-    this._inactiveEvents = this._events;
-    this._events = [];
   }
-
 };
 //</CUSTOMIZED>
-
 
 proto.createElement = function ( tag, props, children ) {
     return createElement( this._doc, tag, props, children );
@@ -2864,7 +2859,7 @@ proto._recordUndoState = function ( range ) {
         if ( range ) {
             this._saveRangeToBookmark( range );
         }
-        undoStack[ undoIndex ] = this._getHTML();
+        undoStack[ undoIndex ] = this._getHTML(false); // <-- CUSTOMIZED: "false" (to preserve range markers)
         this._undoStackLength += 1;
         this._isInUndoState = true;
     }
@@ -3555,20 +3550,26 @@ proto.setKeyHandler = function ( key, fn ) {
 
 // --- Get/Set data ---
 
-proto._getHTML = function () {
-	// <CUSTOMIZED>
-	// Not all browsers return exactly the same HTML string that was originally
-	// inserted. For example, IE always adds ";" at the end of a style attribute,
-	// the other browsers don't. This causes unnecessary validations with the
-	// server, because the value seems to have changed.
-	// Here, we use our own, custom function to convert the DOM to a HTML string
-	// (instead of using the brower's "innerHTML" property). This allows us to
-	// exactly control the order and content of attributes.
-	return this._nodeToHtmlHelper.nodeToHtml(this._body, true); // true = childNodesOnly
-	// <CUSTOMIZED>
-};
+//<CUSTOMIZED>
 
-// <CUSTOMIZED>
+// Not all browsers return exactly the same HTML string that was originally
+// inserted. For example, IE always adds ";" at the end of a style attribute,
+// the other browsers don't. This causes unnecessary validations with the
+// server, because the value seems to have changed.
+//
+// Here, we use our own, custom function to convert the DOM to a HTML string
+// (instead of using the brower's "innerHTML" property). This allows us to
+// exactly control the order and content of attributes.
+//
+// Some callers (e.g. undo stack) still require access to the "raw" HTML. To
+// distinguish between those two cases, the flag "cleanHTML" was added which
+// defaults to "true".
+proto._getHTML = function (cleanHTML) {
+	if (cleanHTML === false) {
+		return this._body.innerHTML;
+	}
+	return this._nodeToHtmlHelper.nodeToHtml(this._body, true); // true = childNodesOnly
+};
 
 proto._nodeToHtmlHelper = {
 
