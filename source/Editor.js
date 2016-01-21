@@ -44,7 +44,6 @@ function Squire ( div, doc, config ) {
 
     //<CUSTOMIZED>
     this._lastActiveNode = null;
-
     this.enabled = true;  //true by default
     //</CUSTOMIZED>
 
@@ -1520,7 +1519,7 @@ proto._nodeToHtmlHelper = {
 						if (name === 'style') {
 							value = this.normalizeStyleAttributeValue(value);
 						}
-						s += ' ' + name + '="' + this.escapeHtml(value) + '"';
+						s += ' ' + name + '="' + this.escapeHtml(value, true) + '"';
 					}
 				}
 			}
@@ -1554,18 +1553,33 @@ proto._nodeToHtmlHelper = {
 	 *
 	 * https://www.owasp.org/index.php/XSS_%28Cross_Site_Scripting%29_Prevention_Cheat_Sheet#RULE_.231_-_HTML_Escape_Before_Inserting_Untrusted_Data_into_HTML_Element_Content
 	 *
+	 * Unlike suggested by the OWASP document, we do not convert ' to &#39;, because we normalize
+	 * attribute value delimiters to " (which makes the use of ' inside the value unambiguous). In
+	 * text nodes, the character is safe anyway.
+	 *
 	 * Additionally, the character \u00A0 (non-breaking space) is replaced by '&nbsp;'. Some browsers
 	 * automatically convert '&nbsp;' to \u00A0 when retrieving the value programmatically. Because
 	 * this confuses Squire and the server-side transformer, we explicitly convert it back.
 	 */
-	escapeHtml: function(s) {
-		s = String(s || '');
-	    return s.replace(/&/g, '&amp;')
-	    		.replace(/</g, '&lt;')
-	    		.replace(/>/g, '&gt;')
-	            .replace(/"/g, '&quot;')
-	            .replace(/'/g, '&#39;')
-	            .replace(/\u00A0/g, '&nbsp;');
+	escapeHtml: function(s, inAttribute) {
+	    s = String(s || '');
+
+	    // <, > and & always have a special meaning, therefore they must always be encoded
+	    s = s.replace(/&/g, '&amp;')
+	         .replace(/</g, '&lt;')
+	    	 .replace(/>/g, '&gt;');
+
+	    // Double quotes only need to be escaped in attributes, not in text nodes
+        // (Single quotes do not need to be escaped at all, because we normalize attribute value delimiters to ".)
+	    if (inAttribute) {
+	    	s = s.replace(/"/g, '&quot;');
+	    }
+
+	    // The non-breaking-space character is always replaced by &nbsp; in Jsoup (see org.jsoup.nodes.Entities.escape()).
+	    // To prevent validation loop with the server, we convert it already on the UI.
+	    s = s.replace(/\u00A0/g, '&nbsp;');
+
+	    return s;
 	}
 };
 
