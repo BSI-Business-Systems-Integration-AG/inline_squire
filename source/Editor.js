@@ -1788,7 +1788,9 @@ proto.insertHTML = function ( html, isPaste ) {
             defaultPrevented: false
         };
 
-        this.addLinks( frag );
+        //<CUSTOMIZED>
+        //this.addLinks( frag );
+        //</CUSTOMIZED>
         cleanTree( frag );
         //<CUSTOMIZED>
         //this.cleanupBRs( frag );
