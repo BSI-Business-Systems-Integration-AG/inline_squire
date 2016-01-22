@@ -42,13 +42,17 @@ function hasTagAttributes ( node, tag, attributes ) {
     	//<CUSTOMIZED>
         // Internet explorer seems to put a semicolon at the end of a style attribute,
         // even if we use setAttribute and the attribute contains no semicolon at all...
+    	// Also, IE. seems to put an extra whitespace before the colon separating a
+    	// style key and its value.
         var nodeAttr = node.getAttribute(attr),
         	queryAttr = attributes[attr];
         if(nodeAttr){
         	nodeAttr = nodeAttr.replace(/[;]$/, '');
+        	nodeAttr = nodeAttr.replace(/\s*:\s*/, ':');
         }
         if (queryAttr){
         	queryAttr = queryAttr.replace(/[;]$/, '');
+        	queryAttr = queryAttr.replace(/\s*:\s*/, ':');
         }
         if ( nodeAttr !== queryAttr ) {
             return false;
