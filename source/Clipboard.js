@@ -52,9 +52,24 @@ var onPaste = function ( event ) {
                 /*jshint loopfunc: true */
                 item.getAsString( function ( html ) {
                 	// <CUSTOMIZED>
-                	self.fireEvent('requestHtmlPaste', {
-                		rawHtml: html
-                	});
+                	//try and match start/end fragment.
+                    if(! html){
+                      return;
+                    }
+                    var startFragment = "<!--StartFragment-->",
+                    	endFragment = "<!--EndFragment-->",
+                    	firstIndex = html.indexOf(startFragment),
+                    	lastIndex = html.lastIndexOf(endFragment),
+                    	extractedHtml = html;
+
+                    if(firstIndex > -1 && lastIndex > -1) {
+                      extractedHtml = html.substring(firstIndex + startFragment.length, lastIndex);
+                    }
+
+                    self.fireEvent('requestHtmlPaste', {
+                      rawHtml: extractedHtml
+                    });
+
                     //self.insertHTML( html, true );
                 	// </CUSTOMIZED>
                 });
