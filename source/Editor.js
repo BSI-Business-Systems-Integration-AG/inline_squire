@@ -125,8 +125,9 @@ function Squire ( div, doc, config ) {
         doc.execCommand( 'enableObjectResizing', false, 'false' );
         doc.execCommand( 'enableInlineTableEditing', false, 'false' );
     } catch ( error ) {}
-
-    this.setHTML( '' );
+  //<CUSTOMIZED>
+    this.setHTML( '', true);
+  //</CUSTOMIZED>
 }
 
 proto.setConfig = function ( config ) {
@@ -1623,7 +1624,7 @@ proto.getHTML = function ( withBookMark ) {
     return html;
 };
 
-proto.setHTML = function ( html ) {
+proto.setHTML = function ( html, suppressSelection ) {
     var frag = this._doc.createDocumentFragment(),
         div = this.createElement( 'DIV' ),
         child;
@@ -1673,10 +1674,12 @@ proto.setHTML = function ( html ) {
     // setSelection. Instead, just store it in lastSelection, so if
     // anything calls getSelection before first focus, we have a range
     // to return.
-    if ( losesSelectionOnBlur ) {
-        this._lastSelection = range;
-    } else {
-        this.setSelection( range );
+    if(!suppressSelection){
+	    if ( losesSelectionOnBlur ) {
+	        this._lastSelection = range;
+	    } else {
+	        this.setSelection( range );
+	    }
     }
     this._updatePath( range, true );
 
