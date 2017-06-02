@@ -327,6 +327,12 @@ proto.split = function ( node, offset, stopNode ) {
         parent = node.parentNode;
         clone = node.cloneNode( false );
 
+        // <CUSTOMIZED>
+        if (clone.nodeName === 'TABLE') {
+	        clone.id = generateTableId();
+	    }
+        // </CUSTOMIZED>
+
         // Add right-hand siblings to the clone
         while ( offset ) {
             next = offset.nextSibling;
@@ -465,6 +471,14 @@ proto.mergeContainers = function ( node ) {
         doc = node.ownerDocument,
         isListItem = ( node.nodeName === 'LI' ),
         needsFix, block;
+
+    // <CUSTOMIZED>
+    var isTableElement = ( node.nodeName === 'TABLE' || node.nodeName === 'TR' || node.nodeName === 'TD');
+    if (isTableElement) {
+    	return;
+    }
+    // </CUSTOMIZED>
+
 
     // Do not merge LIs, unless it only contains a UL
     if ( isListItem && ( !first || !/^[OU]L$/.test( first.nodeName ) ) ) {

@@ -499,6 +499,12 @@ proto.split = function ( node, offset, stopNode ) {
         parent = node.parentNode;
         clone = node.cloneNode( false );
 
+        // <CUSTOMIZED>
+        if (clone.nodeName === 'TABLE') {
+	        clone.id = generateTableId();
+	    }
+        // </CUSTOMIZED>
+
         // Add right-hand siblings to the clone
         while ( offset ) {
             next = offset.nextSibling;
@@ -637,6 +643,14 @@ proto.mergeContainers = function ( node ) {
         doc = node.ownerDocument,
         isListItem = ( node.nodeName === 'LI' ),
         needsFix, block;
+
+    // <CUSTOMIZED>
+    var isTableElement = ( node.nodeName === 'TABLE' || node.nodeName === 'TR' || node.nodeName === 'TD');
+    if (isTableElement) {
+    	return;
+    }
+    // </CUSTOMIZED>
+
 
     // Do not merge LIs, unless it only contains a UL
     if ( isListItem && ( !first || !/^[OU]L$/.test( first.nodeName ) ) ) {
@@ -1454,6 +1468,13 @@ var keyHandlers = {
             event.preventDefault();
             var current = getStartBlockOfRange( range, self ),
                 previous = current && getPreviousBlock( current, self );
+            // <CUSTOMIZED>
+            // Do not delete table cells
+            if (current.nodeName === 'TD' || current.nodeName === 'TR' || current.nodeName === 'TBODY' || current.nodeName === 'TABLE' || current.parentNode.nodeName === 'TD') {
+                self.setSelection( range );
+                return;
+            }
+            // </CUSTOMIZED>
             // Must not be at the very beginning of the text area.
             // Also, must be within editor div.
             if ( previous && isChildOf(self._body, previous)) {
@@ -1514,6 +1535,14 @@ var keyHandlers = {
             event.preventDefault();
             var current = getStartBlockOfRange( range, self ),
                 next = current && getNextBlock( current, self );
+            // <CUSTOMIZED>
+            // Do not delete table cells
+            if (current.nodeName === 'TD' || current.nodeName === 'TR' || current.nodeName === 'TBODY' || current.nodeName === 'TABLE' || current.parentNode.nodeName === 'TD') {
+                self.setSelection( range );
+                setTimeout( function () { afterDelete( self ); }, 0 );
+                return;
+            }
+            // </CUSTOMIZED>
             // Must not be at the very end of the text area.
             // also, next must not be outside of our editor div.
             if ( next && isChildOf(self._body, next, true)) {
@@ -2289,7 +2318,12 @@ proto.setConfig = function ( config ) {
             blockquote: null,
             ul: null,
             ol: null,
-            li: null
+            li: null,
+            // <CUSTOMIZED>
+            table: null,
+            tr: null,
+            td: null
+            // </CUSTOMIZED>
         }
     }, config );
 
@@ -3394,6 +3428,113 @@ proto.modifyBlocks = function ( modify, range ) {
     return this;
 };
 
+// <CUSTOMIZED>
+proto.getParentByNodeName = function getParentByNodeName(node, nodeName) {
+  var parent;
+  if (node === null || nodeName === '') {
+    return null;
+  }
+  if (node.nodeName === nodeName) {
+    return node;
+  }
+  parent  = node.parentNode;
+
+  while (parent.nodeName !== "HTML") {
+    if (parent.nodeName === nodeName) {
+      return parent;
+    }
+    parent = parent.parentNode;
+  }
+
+  return null;
+};
+
+proto.modifyTableAddColumn = function ( modify, range ) {
+  if ( !range && !( range = this.getSelection() ) ) {
+      return this;
+  }
+
+  // 1. Save undo checkpoint and bookmark selection
+  if ( this._isInUndoState ) {
+      this._saveRangeToBookmark( range );
+  } else {
+      this._recordUndoState( range );
+  }
+
+  var tdNode = this.getParentByNodeName(range.startContainer, 'TD');
+
+  // 2. Expand range to block boundaries
+  expandRangeToBlockBoundaries( range, this );
+
+  if ( tdNode ) {
+    var pos = Array.prototype.indexOf.call(tdNode.parentNode.children, tdNode);
+    var tagAttributes = this._config.tagAttributes;
+    for (var i = 0; i < tdNode.parentNode.parentNode.children.length; i++) {
+      var newTd = this.createElement( 'TD', tagAttributes.td );
+      newTd.appendChild( this.createElement( 'BR' ) );
+      var targetNode = null;
+      if ( pos < tdNode.parentNode.parentNode.children[i].children.length ) {
+        targetNode = tdNode.parentNode.parentNode.children[i].children[pos].nextSibling;
+      }
+      tdNode.parentNode.parentNode.children[i].insertBefore(newTd, targetNode);
+    }
+  }
+
+  // 6. Restore selection
+  this._getRangeAndRemoveBookmark( range );
+  this.setSelection( range );
+  this._updatePath( range, true );
+
+  // 7. We're not still in an undo state
+  if ( !canObserveMutations ) {
+      this._docWasChanged();
+  }
+
+  return this;
+};
+
+proto.modifyTableAddRow = function ( modify, range ) {
+  if ( !range && !( range = this.getSelection() ) ) {
+      return this;
+  }
+
+  // 1. Save undo checkpoint and bookmark selection
+  if ( this._isInUndoState ) {
+      this._saveRangeToBookmark( range );
+  } else {
+      this._recordUndoState( range );
+  }
+
+  var trNode = this.getParentByNodeName(range.startContainer, 'TR');
+
+  // 2. Expand range to block boundaries
+  expandRangeToBlockBoundaries( range, this );
+
+  if ( trNode ) {
+    var tagAttributes = this._config.tagAttributes,
+    newTr = this.createElement( 'TR', tagAttributes.tr );
+    for (var i = 0; i < trNode.children.length; i++) {
+      var newTd = this.createElement( 'TD', tagAttributes.td );
+      newTd.appendChild( this.createElement( 'BR' ) );
+      newTr.appendChild( newTd );
+    }
+    trNode.parentNode.insertBefore(newTr, trNode.nextSibling);
+  }
+
+  // 6. Restore selection
+  this._getRangeAndRemoveBookmark( range );
+  this.setSelection( range );
+  this._updatePath( range, true );
+
+  // 7. We're not still in an undo state
+  if ( !canObserveMutations ) {
+      this._docWasChanged();
+  }
+
+  return this;
+};
+// </CUSTOMIZED>
+
 var increaseBlockQuoteLevel = function ( frag ) {
     return this.createElement( 'BLOCKQUOTE',
         this._config.tagAttributes.blockquote, [
@@ -3599,7 +3740,9 @@ proto._getHTML = function (cleanHTML) {
 proto._nodeToHtmlHelper = {
 
 	// order matters!
-	VALID_ATTRIBUTE_NAMES: ['class', 'style'],
+    // <CUSTOMIZED>
+	VALID_ATTRIBUTE_NAMES: ['class', 'style', 'id'],
+	// </CUSTOMIZED>
 
 	/**
 	 * Returns a filtered and normalized string of HTML code representing the given node, suitable
@@ -4279,6 +4422,91 @@ proto.removeList = command( 'modifyBlocks', removeList );
 
 proto.increaseListLevel = command( 'modifyBlocks', increaseListLevel );
 proto.decreaseListLevel = command( 'modifyBlocks', decreaseListLevel );
+
+// <CUSTOMIZED>
+proto.getTableId = function ( attributes, range ) {
+  if ( !attributes ) { attributes = {}; }
+  if ( !range && !( range = this.getSelection() ) ) {
+      return null;
+  }
+  var tableNode = this.getParentByNodeName(range.startContainer, 'TABLE');
+  if ( tableNode ) {
+    return tableNode.id;
+  }
+  return null;
+};
+
+var generateTableId = function () {
+  var id = "";
+  var possibleCharacters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+  for (var i=0; i<10; i++) {
+    id += possibleCharacters.charAt(Math.floor(Math.random() * possibleCharacters.length));
+  }
+
+  return id;
+};
+
+var makeTableInternal = function ( self, frag ) {
+  var walker = getBlockWalker( frag, self ),
+      node, tag, prev, newTd, newTr, newTable,
+      tagAttributes = self._config.tagAttributes;
+  while ( node = walker.nextNode() ) {
+      tag = node.parentNode.nodeName;
+      if ( tag !== 'TD' ) {
+          newTd = self.createElement( 'TD', tagAttributes.td );
+          newTr = self.createElement( 'TR', tagAttributes.tr, [ newTd ] );
+          if ( node.dir ) {
+              newTd.dir = node.dir;
+          }
+
+          // Have we replaced the previous block with a new <table>?
+          if ( ( prev = node.previousSibling ) && prev.nodeName === 'TABLE' ) {
+              prev.appendChild( newTr );
+          }
+          // Otherwise, replace this block with the <table>
+          else {
+              newTable = self.createElement( 'TABLE', tagAttributes.table, [newTr]);
+              newTable.id = generateTableId();
+
+              replaceWith(
+                  node,
+                  newTable
+              );
+          }
+          newTd.appendChild( node );
+      }
+  }
+};
+
+var makeTable = function ( frag ) {
+  makeTableInternal( this, frag );
+  return frag;
+};
+
+var removeTable = function ( frag ) {
+  var tables = frag.querySelectorAll( 'TABLE, TR, TD' ),
+      i, l, ll, table, tableFrag, children, child;
+  for ( i = 0, l = tables.length; i < l; i += 1 ) {
+      table = tables[i];
+      tableFrag = empty( table );
+      children = tableFrag.childNodes;
+      ll = children.length;
+      while ( ll-- ) {
+          child = children[ll];
+          replaceWith( child, empty( child ) );
+      }
+      this.fixContainer( tableFrag );
+      replaceWith( table, tableFrag );
+  }
+  return frag;
+};
+
+proto.makeTable = command( 'modifyBlocks', makeTable );
+proto.removeTable = command( 'modifyBlocks', removeTable );
+proto.addColumn = command( 'modifyTableAddColumn', null );
+proto.addRow = command( 'modifyTableAddRow', null );
+// </CUSTOMIZED>
 
 if ( typeof exports === 'object' ) {
     module.exports = Squire; //jshint ignore:line

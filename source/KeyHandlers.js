@@ -265,6 +265,13 @@ var keyHandlers = {
             event.preventDefault();
             var current = getStartBlockOfRange( range, self ),
                 previous = current && getPreviousBlock( current, self );
+            // <CUSTOMIZED>
+            // Do not delete table cells
+            if (current.nodeName === 'TD' || current.nodeName === 'TR' || current.nodeName === 'TBODY' || current.nodeName === 'TABLE' || current.parentNode.nodeName === 'TD') {
+                self.setSelection( range );
+                return;
+            }
+            // </CUSTOMIZED>
             // Must not be at the very beginning of the text area.
             // Also, must be within editor div.
             if ( previous && isChildOf(self._body, previous)) {
@@ -325,6 +332,14 @@ var keyHandlers = {
             event.preventDefault();
             var current = getStartBlockOfRange( range, self ),
                 next = current && getNextBlock( current, self );
+            // <CUSTOMIZED>
+            // Do not delete table cells
+            if (current.nodeName === 'TD' || current.nodeName === 'TR' || current.nodeName === 'TBODY' || current.nodeName === 'TABLE' || current.parentNode.nodeName === 'TD') {
+                self.setSelection( range );
+                setTimeout( function () { afterDelete( self ); }, 0 );
+                return;
+            }
+            // </CUSTOMIZED>
             // Must not be at the very end of the text area.
             // also, next must not be outside of our editor div.
             if ( next && isChildOf(self._body, next, true)) {
